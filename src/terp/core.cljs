@@ -4,8 +4,9 @@
 
 (def default-env
   {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
-   'defn ^:macro (fn [name args body]
-                   (list 'def name (list 'fn* args body)))})
+   'defn (with-meta (fn [name args body]
+                      (list 'def name (list 'fn* args body)))
+                    {:macro true})})
 
 ;; macroexpansion
 
