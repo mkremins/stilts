@@ -5,4 +5,5 @@
   :plugins [[lein-cljsbuild "1.0.3"]]
   :cljsbuild {:builds [{:source-paths ["src"]
                         :compiler {:output-to "target/tests.js"
-                                   :optimizations :whitespace}}]})
+                                   :optimizations :simple
+                                   :target :nodejs}}]})
