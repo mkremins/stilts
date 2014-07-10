@@ -4,6 +4,6 @@
                  [org.clojure/clojurescript "0.0-2268"]]
   :plugins [[lein-cljsbuild "1.0.3"]]
   :cljsbuild {:builds [{:source-paths ["src"]
-                        :compiler {:output-to "target/tests.js"
+                        :compiler {:output-to "target/repl.js"
                                    :optimizations :simple
                                    :target :nodejs}}]})
