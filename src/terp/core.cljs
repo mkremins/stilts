@@ -5,7 +5,7 @@
 (def default-env
   {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
    'defn (with-meta (fn [name args body]
-                      (list 'def name (list 'fn* args body)))
+                      `(def ~name (fn* ~args ~body)))
                     {:macro true})})
 
 ;; macroexpansion
