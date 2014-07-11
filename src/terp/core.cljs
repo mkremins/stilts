@@ -81,7 +81,8 @@
               (apply hash-map)) env]
       seq? (eval-seq exp env)
       set? [(set (map eval-subexp exp)) env]
-      symbol? [(env exp) env]
+      symbol? (do (assert (env exp) (str "var " exp " is not defined"))
+                  [(env exp) env])
       vector? [(mapv eval-subexp exp) env]
       [exp env])))
 
