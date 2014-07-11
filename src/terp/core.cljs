@@ -3,7 +3,7 @@
   (:require [clojure.walk :as walk]))
 
 (def default-env
-  {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
+  {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =, 'aget aget,
    'defn (with-meta (fn [name args body]
                       `(def ~name (fn* ~args ~body)))
                     {:macro true})})
@@ -28,6 +28,22 @@
 
 (defn macroexpand-all [form env]
   (walk/prewalk #(macroexpand % env) form))
+
+;; interop normalization
+
+(defn normalize-interop [form]
+  (if (and (seq? form)
+           (symbol? (first form))
+           (= (first (str (first form))) \.))
+    (let [sym-str (str (first form))
+          target (second form)]
+      (if (= (second sym-str) \-)
+        (list 'aget target (subs sym-str 2))
+        (cons (list 'aget target (subs sym-str 1)) (drop 2 form))))
+    form))
+
+(defn normalize-all-interop [form]
+  (walk/prewalk normalize-interop form))
 
 ;; special forms + function application
 
@@ -110,7 +126,7 @@
   ([form]
     (eval form default-env))
   ([form env]
-    (-> form (macroexpand-all env) (eval-exp env))))
+    (-> form (macroexpand-all env) normalize-all-interop (eval-exp env))))
 
 (defn eval-all
   ([forms]
