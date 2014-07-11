@@ -59,8 +59,11 @@
 
 (defmethod eval-seq 'fn* [[_ arg-names body] env]
   (let [f (fn [& args]
-            (let [benv (merge env (zipmap arg-names args))]
-              (first (eval-exp body benv))))]
+            (loop [benv (merge env (zipmap arg-names args))]
+              (let [[v _] (eval-exp body benv)]
+                (if (instance? RecurThunk v)
+                  (recur (merge env (zipmap arg-names (.-args v))))
+                  v))))]
     [f env]))
 
 (defmethod eval-seq 'let* [[_ bvec body] env]

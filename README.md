@@ -18,7 +18,7 @@ I still want `eval` for ClojureScript. I still don't have `eval` for ClojureScri
 * A command-line REPL via node.js
 
 ### Stuff I want
-* Support for `recur` (within `fn*`), `throw`, `try` special forms
+* Support for `throw`, `try` special forms
 * Support for more `clojure.core` macros
 * JS interop of some sort
 * Multiple-arity functions
