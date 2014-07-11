@@ -44,6 +44,13 @@
   (let [[v env'] (eval-exp arg env)]
     [v (assoc env' sym v)]))
 
+(defmethod eval-seq 'do [[_ & statements] env]
+  (loop [statements statements prev-v nil env env]
+    (if-let [statement (first statements)]
+      (let [[v env'] (eval-exp statement env)]
+        (recur (rest statements) v env'))
+      [prev-v env])))
+
 (defmethod eval-seq 'if [[_ test then else] env]
   (let [[test-v env'] (eval-exp test env)]
     (eval-exp (if test-v then else) env')))
