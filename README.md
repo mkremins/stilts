@@ -11,14 +11,14 @@ I still want `eval` for ClojureScript. I still don't have `eval` for ClojureScri
 ## Features
 
 ### Stuff I have
-* Support for `def`, `do`, `if`, `fn*`, `let*`, `quote` special forms
+* Support for `def`, `do`, `if`, `fn*`, `let*`, `loop*`, `quote`, `recur` special forms
 * Macroexpansion
 * Runtime `defmacro` (in theory)
 * Precise control over the evaluation environment
 * A command-line REPL via node.js
 
 ### Stuff I want
-* Support for `loop*`, `recur`, `throw`, `try` special forms
+* Support for `recur` (within `fn*`), `throw`, `try` special forms
 * Support for more `clojure.core` macros
 * JS interop of some sort
 * Multiple-arity functions

@@ -8,6 +8,8 @@
                       `(def ~name (fn* ~args ~body)))
                     {:macro true})})
 
+(deftype RecurThunk [args]) ; represents a `(recur ...)` special form
+
 ;; macroexpansion
 
 (defn macro? [f]
@@ -68,8 +70,23 @@
         (recur (rest bpairs) (assoc benv' bsym v)))
       (eval-exp body benv))))
 
+(defmethod eval-seq 'loop* [[_ bvec body] env]
+  (let [bpairs (partition 2 bvec)
+        bsyms (map first bpairs)]
+    (loop [bpairs bpairs benv env]
+      (if-let [[bsym bform] (first bpairs)]
+        (let [[v benv'] (eval-exp bform benv)]
+          (recur (rest bpairs) (assoc benv' bsym v)))
+        (let [[v benv'] (eval-exp body benv)]
+          (if (instance? RecurThunk v)
+            (recur (map vector bsyms (.-args v)) env)
+            [v benv']))))))
+
 (defmethod eval-seq 'quote [[_ arg] env]
   [arg env])
+
+(defmethod eval-seq 'recur [[_ & args] env]
+  [(RecurThunk. (map #(first (eval-exp % env)) args)) env])
 
 ;; generic evaluation
 
