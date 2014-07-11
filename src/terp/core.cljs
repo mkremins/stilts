@@ -95,8 +95,4 @@
   ([forms]
     (eval-all forms default-env))
   ([forms env]
-    (loop [forms forms prev-v nil env env]
-      (if-let [form (first forms)]
-        (let [[v env'] (eval form env)]
-          (recur (rest forms) v env'))
-        [prev-v env]))))
+    (eval (cons 'do (seq forms)) env)))
