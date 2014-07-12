@@ -1,12 +1,11 @@
 (ns terp.core
   (:refer-clojure :exclude [eval macroexpand macroexpand-1])
-  (:require [clojure.walk :as walk]))
+  (:require [clojure.walk :as walk]
+            [terp.macros :as macros]))
 
 (def default-env
-  {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =, 'aget aget,
-   'defn (with-meta (fn [name args body]
-                      `(def ~name (fn* ~args ~body)))
-                    {:macro true})})
+  (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =, 'aget aget}
+    (merge macros/core-macros)))
 
 (deftype RecurThunk [args]) ; represents a `(recur ...)` special form
 
