@@ -73,13 +73,12 @@
     (eval-exp (if test-v then else) env')))
 
 (defmethod eval-seq 'fn* [[_ arg-names body] env]
-  (let [f (fn [& args]
-            (loop [benv (merge env (zipmap arg-names args))]
-              (let [[v _] (eval-exp body benv)]
-                (if (instance? RecurThunk v)
-                  (recur (merge env (zipmap arg-names (.-args v))))
-                  v))))]
-    [f env]))
+  [(fn [& args]
+     (loop [benv (merge env (zipmap arg-names args))]
+       (let [[v _] (eval-exp body benv)]
+         (if (instance? RecurThunk v)
+           (recur (merge env (zipmap arg-names (.-args v))))
+           v)))) env])
 
 (defmethod eval-seq 'let* [[_ bvec body] env]
   (loop [bpairs (partition 2 bvec) benv env]
