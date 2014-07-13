@@ -77,13 +77,19 @@
   (let [[test-v env'] (eval-exp test env)]
     (eval-exp (if test-v then else) env')))
 
-(defmethod eval-seq 'fn* [[_ arg-names body] env]
-  [(fn [& args]
-     (loop [benv (merge env (zipmap arg-names args))]
-       (let [[v _] (eval-exp body (with-meta benv {:allow-recur? true}))]
-         (if (instance? RecurThunk v)
-           (recur (merge env (zipmap arg-names (.-args v))))
-           v)))) env])
+(defmethod eval-seq 'fn* [[_ & clauses] env]
+  (let [clauses (if (vector? (first clauses))
+                  [[(first clauses) (second clauses)]]
+                  clauses)
+        clause-for-argc (zipmap (map (comp count first) clauses) clauses)]
+    [(fn [& args]
+       (if-let [[arg-names body] (clause-for-argc (count args))]
+         (loop [benv (merge env (zipmap arg-names args))]
+           (let [[v _] (eval-exp body (with-meta benv {:allow-recur? true}))]
+             (if (instance? RecurThunk v)
+               (recur (merge env (zipmap arg-names (.-args v))))
+               v)))
+         (throw (js/Error. "no matching clause for arg count")))) env]))
 
 (defmethod eval-seq 'let* [[_ bvec body] env]
   (loop [bpairs (partition 2 bvec) benv env]
