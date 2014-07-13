@@ -4,7 +4,8 @@
             [stilts.macros :as macros]))
 
 (def default-env
-  (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =, 'aget aget}
+  (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
+       'aget aget, 'get get, 'nth nth, 'nthnext nthnext}
     (merge macros/core-macros)))
 
 (deftype RecurThunk [args]) ; represents a `(recur ...)` special form
