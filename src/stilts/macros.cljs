@@ -3,11 +3,15 @@
 (defn -defn [name args & body]
   `(def ~name (fn* ~args (do ~@body))))
 
+(defn -and
+  ([] true)
+  ([x] x)
+  ([x & xs] `(if ~x (~'and ~@xs) ~x)))
+
 (defn -or
   ([] nil)
   ([x] x)
-  ([x & xs]
-    `(if ~x ~x (~'or ~@xs))))
+  ([x & xs] `(if ~x ~x (~'or ~@xs))))
 
 ;; destructuring binding
 
@@ -66,5 +70,5 @@
   (apply hash-map (interleave (keys m) (map f (vals m)))))
 
 (def core-macros
-  (->> {'defn -defn, 'let -let, 'or -or}
+  (->> {'and -and, 'defn -defn, 'let -let, 'or -or}
     (map-vals #(with-meta % {:macro true}))))
