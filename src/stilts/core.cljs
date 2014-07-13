@@ -63,11 +63,15 @@
     [v (assoc env' sym v)]))
 
 (defmethod eval-seq 'do [[_ & statements] env]
-  (loop [statements statements prev-v nil env env]
-    (if-let [statement (first statements)]
-      (let [[v env'] (eval-exp statement env)]
-        (recur (rest statements) v env'))
-      [prev-v env])))
+  (let [return (last statements)]
+    (loop [statements (butlast statements)
+           st-env (vary-meta env dissoc :allow-recur?)]
+      (if-let [statement (first statements)]
+        (let [[_ env'] (eval-exp statement st-env)]
+          (recur (rest statements) env'))
+        (eval-exp return (if (:allow-recur? (meta env))
+                           (vary-meta st-env assoc :allow-recur? true)
+                           st-env))))))
 
 (defmethod eval-seq 'if [[_ test then else] env]
   (let [[test-v env'] (eval-exp test env)]
@@ -76,7 +80,7 @@
 (defmethod eval-seq 'fn* [[_ arg-names body] env]
   [(fn [& args]
      (loop [benv (merge env (zipmap arg-names args))]
-       (let [[v _] (eval-exp body benv)]
+       (let [[v _] (eval-exp body (with-meta benv {:allow-recur? true}))]
          (if (instance? RecurThunk v)
            (recur (merge env (zipmap arg-names (.-args v))))
            v)))) env])
@@ -95,15 +99,16 @@
       (if-let [[bsym bform] (first bpairs)]
         (let [[v benv'] (eval-exp bform benv)]
           (recur (rest bpairs) (assoc benv' bsym v)))
-        (let [[v benv'] (eval-exp body benv)]
+        (let [[v benv'] (eval-exp body (with-meta benv {:allow-recur? true}))]
           (if (instance? RecurThunk v)
             (recur (map vector bsyms (.-args v)) env)
-            [v benv']))))))
+            [v (vary-meta benv' dissoc :allow-recur?)]))))))
 
 (defmethod eval-seq 'quote [[_ arg] env]
   [arg env])
 
 (defmethod eval-seq 'recur [[_ & args] env]
+  (assert (:allow-recur? (meta env)) "can only recur from tail position within fn*/loop* body")
   [(RecurThunk. (map #(first (eval-exp % env)) args)) env])
 
 ;; generic evaluation
