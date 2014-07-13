@@ -1,4 +1,4 @@
-(ns terp.macros)
+(ns stilts.macros)
 
 (defn -defn [name args & body]
   `(def ~name (fn* ~args (do ~@body))))

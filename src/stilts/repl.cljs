@@ -1,16 +1,16 @@
-(ns terp.repl
+(ns stilts.repl
   (:require [cljs.reader :as rdr]
-            [terp.core :as terp]))
+            [stilts.core :as stilts]))
 
 (enable-console-print!)
 
 (def rl (js/require "readline"))
 
-(def ^:dynamic *repl-env* terp/default-env)
+(def ^:dynamic *repl-env* stilts/default-env)
 
 (defn eval-print! [interface line]
   (let [form (rdr/read-string line)
-        [res env] (terp/eval form *repl-env*)]
+        [res env] (stilts/eval form *repl-env*)]
     (set! *repl-env* env)
     (prn res)
     (.prompt interface)))

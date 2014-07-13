@@ -1,7 +1,7 @@
-(ns terp.core
+(ns stilts.core
   (:refer-clojure :exclude [eval macroexpand macroexpand-1])
   (:require [clojure.walk :as walk]
-            [terp.macros :as macros]))
+            [stilts.macros :as macros]))
 
 (def default-env
   (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =, 'aget aget}

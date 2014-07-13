@@ -1,4 +1,4 @@
-(defproject terp "0.1.0-SNAPSHOT"
+(defproject stilts "0.1.0-SNAPSHOT"
   :description "Tiny ClojureScript interpreter in ClojureScript"
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/clojurescript "0.0-2268"]]

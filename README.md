@@ -1,8 +1,6 @@
-# Terp
+# Stilts
 
-Terp is a tiny ClojureScript interpreter written in ClojureScript.
-
-Yes, I know the name is terrible. It will be changed.
+Stilts is a tiny ClojureScript interpreter written in ClojureScript.
 
 ## Why?
 
