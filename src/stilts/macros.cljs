@@ -13,6 +13,9 @@
   ([x] x)
   ([x & xs] `(if ~x ~x (~'or ~@xs))))
 
+(defn -when [test & body]
+  `(if ~test ~(cons 'do body) nil))
+
 ;; destructuring binding
 
 (defprotocol IBindingForm
@@ -70,5 +73,5 @@
   (apply hash-map (interleave (keys m) (map f (vals m)))))
 
 (def core-macros
-  (->> {'and -and, 'defn -defn, 'let -let, 'or -or}
+  (->> {'and -and, 'defn -defn, 'let -let, 'or -or, 'when -when}
     (map-vals #(with-meta % {:macro true}))))
