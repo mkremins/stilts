@@ -1,12 +1,15 @@
 (ns stilts.core
-  (:refer-clojure :exclude [eval macroexpand macroexpand-1])
+  (:refer-clojure :exclude [eval macroexpand macroexpand-1 resolve])
   (:require [clojure.walk :as walk]
             [stilts.macros :as macros]))
 
 (def default-env
-  (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
-       'aget aget, 'get get, 'nth nth, 'nthnext nthnext}
-    (merge macros/core-macros)))
+  {:globals (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
+                 'aget aget, 'get get, 'nth nth, 'nthnext nthnext}
+              (merge macros/core-macros))})
+
+(defn resolve [sym env]
+  (or (get-in env [:locals sym]) (get-in env [:globals sym])))
 
 (deftype RecurThunk [args]) ; represents a `(recur ...)` special form
 
@@ -16,8 +19,8 @@
   (:macro (meta f)))
 
 (defn macroexpand-1 [form env]
-  (if (and (seq? form) (macro? (env (first form))))
-    (apply (env (first form)) (rest form))
+  (if (and (seq? form) (macro? (resolve (first form) env)))
+    (apply (resolve (first form) env) (rest form))
     form))
 
 (defn macroexpand [form env]
@@ -60,17 +63,17 @@
 
 (defmethod eval-seq 'def [[_ sym arg] env]
   (let [[v env'] (eval-exp arg env)]
-    [v (assoc env' sym v)]))
+    [v (assoc-in env' [:globals sym] v)]))
 
 (defmethod eval-seq 'do [[_ & statements] env]
   (let [return (last statements)]
     (loop [statements (butlast statements)
-           st-env (vary-meta env dissoc :allow-recur?)]
+           st-env (dissoc env :allow-recur?)]
       (if-let [statement (first statements)]
         (let [[_ env'] (eval-exp statement st-env)]
           (recur (rest statements) env'))
-        (eval-exp return (if (:allow-recur? (meta env))
-                           (vary-meta st-env assoc :allow-recur? true)
+        (eval-exp return (if (:allow-recur? env)
+                           (assoc st-env :allow-recur? true)
                            st-env))))))
 
 (defmethod eval-seq 'if [[_ test then else] env]
@@ -84,10 +87,10 @@
         clause-for-argc (zipmap (map (comp count first) clauses) clauses)]
     [(fn [& args]
        (if-let [[arg-names body] (clause-for-argc (count args))]
-         (loop [benv (merge env (zipmap arg-names args))]
-           (let [[v _] (eval-exp body (vary-meta benv assoc :allow-recur? true))]
+         (loop [benv (update-in env [:locals] merge (zipmap arg-names args))]
+           (let [[v _] (eval-exp body (assoc benv :allow-recur? true))]
              (if (instance? RecurThunk v)
-               (recur (merge env (zipmap arg-names (.-args v))))
+               (recur (update-in env [:locals] merge (zipmap arg-names (.-args v))))
                v)))
          (throw (js/Error. "no matching clause for arg count")))) env]))
 
@@ -95,8 +98,9 @@
   (loop [bpairs (partition 2 bvec) benv env]
     (if-let [[bsym bform] (first bpairs)]
       (let [[v benv'] (eval-exp bform benv)]
-        (recur (rest bpairs) (assoc benv' bsym v)))
-      (eval-exp body benv))))
+        (recur (rest bpairs) (assoc-in benv' [:locals bsym] v)))
+      (let [[v benv'] (eval-exp body benv)]
+        [v (dissoc benv' :locals)]))))
 
 (defmethod eval-seq 'loop* [[_ bvec body] env]
   (let [bpairs (partition 2 bvec)
@@ -104,27 +108,28 @@
     (loop [bpairs bpairs benv env]
       (if-let [[bsym bform] (first bpairs)]
         (let [[v benv'] (eval-exp bform benv)]
-          (recur (rest bpairs) (assoc benv' bsym v)))
-        (let [[v benv'] (eval-exp body (vary-meta benv assoc :allow-recur? true))]
+          (recur (rest bpairs) (assoc-in benv' [:locals bsym] v)))
+        (let [[v benv'] (eval-exp body (assoc benv :allow-recur? true))]
           (if (instance? RecurThunk v)
             (recur (map vector bsyms (.-args v)) env)
-            [v (vary-meta benv' dissoc :allow-recur?)]))))))
+            [v (dissoc benv' :allow-recur? :locals)]))))))
 
 (defmethod eval-seq 'quote [[_ arg] env]
   [arg env])
 
 (defmethod eval-seq 'recur [[_ & args] env]
-  (assert (:allow-recur? (meta env)) "can only recur from tail position within fn*/loop* body")
+  (assert (:allow-recur? env) "can only recur from tail position within fn*/loop* body")
   [(RecurThunk. (map #(first (eval-exp % env)) args)) env])
 
 (defmethod eval-seq 'throw [[_ arg] env]
   (let [[thrown _] (eval-exp arg env)]
-    (if-let [[_ local body] (:catch (meta env))]
-      (eval-exp body (-> env (assoc local thrown) (vary-meta dissoc :catch)))
+    (if-let [[_ local body] (:catch env)]
+      (let [[v env'] (eval-exp body (-> env (assoc-in [:locals local] thrown) (dissoc :catch)))]
+        [v (dissoc env' :locals)])
       (throw (js/Error. "evaluated code threw an uncaught exception")))))
 
 (defmethod eval-seq 'try [[_ body catch] env]
-  (eval-exp body (vary-meta env assoc :catch catch)))
+  (eval-exp body (assoc env :catch catch)))
 
 ;; generic evaluation
 
@@ -136,8 +141,8 @@
               (apply hash-map)) env]
       seq? (eval-seq exp env)
       set? [(set (map eval-subexp exp)) env]
-      symbol? (do (assert (env exp) (str "var " exp " is not defined"))
-                  [(env exp) env])
+      symbol? (do (assert (resolve exp env) (str "var " exp " is not defined"))
+                  [(resolve exp env) env])
       vector? [(mapv eval-subexp exp) env]
       [exp env])))
 
