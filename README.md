@@ -9,18 +9,14 @@ I still want `eval` for ClojureScript. I still don't have `eval` for ClojureScri
 ## Features
 
 ### Stuff I have
-* Support for `def`, `do`, `if`, `fn*`, `let*`, `loop*`, `quote`, `recur` special forms
+* Support for `def`, `do`, `if`, `fn*`, `let*`, `loop*`, `quote`, `recur`, `throw`, `try` special forms
 * Macroexpansion
-* Runtime `defmacro` (in theory)
 * Precise control over the evaluation environment
 * A command-line REPL via node.js
 * JS interop via `cljs.core/aget`
 
 ### Stuff I want
-* Support for `throw`, `try` special forms
-* Support for more `clojure.core` macros
-* Multiple-arity functions
-* `deftype`, `defprotocol`, `defrecord`
+* See the [issue tracker](https://github.com/mkremins/stilts/issues?state=open)
 
 ### Stuff I don't want to think about right now 
 * Namespaces
