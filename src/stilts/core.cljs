@@ -85,7 +85,7 @@
     [(fn [& args]
        (if-let [[arg-names body] (clause-for-argc (count args))]
          (loop [benv (merge env (zipmap arg-names args))]
-           (let [[v _] (eval-exp body (with-meta benv {:allow-recur? true}))]
+           (let [[v _] (eval-exp body (vary-meta benv assoc :allow-recur? true))]
              (if (instance? RecurThunk v)
                (recur (merge env (zipmap arg-names (.-args v))))
                v)))
@@ -105,7 +105,7 @@
       (if-let [[bsym bform] (first bpairs)]
         (let [[v benv'] (eval-exp bform benv)]
           (recur (rest bpairs) (assoc benv' bsym v)))
-        (let [[v benv'] (eval-exp body (with-meta benv {:allow-recur? true}))]
+        (let [[v benv'] (eval-exp body (vary-meta benv assoc :allow-recur? true))]
           (if (instance? RecurThunk v)
             (recur (map vector bsyms (.-args v)) env)
             [v (vary-meta benv' dissoc :allow-recur?)]))))))
@@ -116,6 +116,15 @@
 (defmethod eval-seq 'recur [[_ & args] env]
   (assert (:allow-recur? (meta env)) "can only recur from tail position within fn*/loop* body")
   [(RecurThunk. (map #(first (eval-exp % env)) args)) env])
+
+(defmethod eval-seq 'throw [[_ arg] env]
+  (let [[thrown _] (eval-exp arg env)]
+    (if-let [[_ local body] (:catch (meta env))]
+      (eval-exp body (-> env (assoc local thrown) (vary-meta dissoc :catch)))
+      (throw (js/Error. "evaluated code threw an uncaught exception")))))
+
+(defmethod eval-seq 'try [[_ body catch] env]
+  (eval-exp body (vary-meta env assoc :catch catch)))
 
 ;; generic evaluation
 
