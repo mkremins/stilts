@@ -68,12 +68,12 @@
 (defmethod eval-seq 'do [[_ & statements] env]
   (let [return (last statements)]
     (loop [statements (butlast statements)
-           st-env (dissoc env :allow-recur?)]
+           st-env (dissoc env :recur-arity)]
       (if-let [statement (first statements)]
         (let [[_ env'] (eval-exp statement st-env)]
           (recur (rest statements) env'))
-        (eval-exp return (if (:allow-recur? env)
-                           (assoc st-env :allow-recur? true)
+        (eval-exp return (if-let [recur-arity (:recur-arity env)]
+                           (assoc st-env :recur-arity recur-arity)
                            st-env))))))
 
 (defmethod eval-seq 'if [[_ test then else] env]
@@ -88,7 +88,7 @@
     [(fn [& args]
        (if-let [[arg-names body] (clause-for-argc (count args))]
          (loop [benv (update-in env [:locals] merge (zipmap arg-names args))]
-           (let [[v _] (eval-exp body (assoc benv :allow-recur? true))]
+           (let [[v _] (eval-exp body (assoc benv :recur-arity (count args)))]
              (if (instance? RecurThunk v)
                (recur (update-in env [:locals] merge (zipmap arg-names (.-args v))))
                v)))
@@ -104,21 +104,25 @@
 
 (defmethod eval-seq 'loop* [[_ bvec body] env]
   (let [bpairs (partition 2 bvec)
-        bsyms (map first bpairs)]
+        bsyms (map first bpairs)
+        recur-arity (count bpairs)]
     (loop [bpairs bpairs benv env]
       (if-let [[bsym bform] (first bpairs)]
         (let [[v benv'] (eval-exp bform benv)]
           (recur (rest bpairs) (assoc-in benv' [:locals bsym] v)))
-        (let [[v benv'] (eval-exp body (assoc benv :allow-recur? true))]
+        (let [[v benv'] (eval-exp body (assoc benv :recur-arity recur-arity))]
           (if (instance? RecurThunk v)
             (recur (map vector bsyms (.-args v)) env)
-            [v (dissoc benv' :allow-recur? :locals)]))))))
+            [v (dissoc benv' :locals :recur-arity)]))))))
 
 (defmethod eval-seq 'quote [[_ arg] env]
   [arg env])
 
 (defmethod eval-seq 'recur [[_ & args] env]
-  (assert (:allow-recur? env) "can only recur from tail position within fn*/loop* body")
+  (let [arity (:recur-arity env)
+        argc (count args)]
+    (assert arity "can only recur from tail position within fn*/loop* body")
+    (assert (= arity argc) (str "expected " arity " args to recur, but got " argc)))
   [(RecurThunk. (map #(first (eval-exp % env)) args)) env])
 
 (defmethod eval-seq 'throw [[_ arg] env]
