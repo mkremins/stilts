@@ -5,11 +5,16 @@
 
 (def default-env
   {:globals (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
-                 'aget aget, 'get get, 'nth nth, 'nthnext nthnext}
+                 'aget aget, 'get get, 'list list, 'nth nth, 'nthnext nthnext}
               (merge macros/core-macros))})
 
+(def undefined (js/Object.))
+
 (defn resolve [sym env]
-  (or (get-in env [:locals sym]) (get-in env [:globals sym])))
+  (let [local (get-in env [:locals sym] undefined)]
+    (if (= local undefined)
+      (get-in env [:globals sym] undefined)
+      local)))
 
 (deftype RecurThunk [args]) ; represents a `(recur ...)` special form
 
@@ -62,7 +67,8 @@
   [() env])
 
 (defmethod eval-seq 'def [[_ sym arg] env]
-  (let [[v env'] (eval-exp arg env)]
+  (let [[v env'] (eval-exp arg env)
+        v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
     [v (assoc-in env' [:globals sym] v)]))
 
 (defmethod eval-seq 'do [[_ & statements] env]
@@ -145,7 +151,7 @@
               (apply hash-map)) env]
       seq? (eval-seq exp env)
       set? [(set (map eval-subexp exp)) env]
-      symbol? (do (assert (resolve exp env) (str "var " exp " is not defined"))
+      symbol? (do (assert (not= (resolve exp env) undefined) (str "var " exp " is not defined"))
                   [(resolve exp env) env])
       vector? [(mapv eval-subexp exp) env]
       [exp env])))
