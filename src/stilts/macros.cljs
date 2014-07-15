@@ -3,6 +3,9 @@
 (defn -defn [name args & body]
   `(def ~name (fn* ~args (do ~@body))))
 
+(defn -defmacro [name args & body]
+  `(~'defn ~(with-meta name {:macro true}) ~args ~@body))
+
 (defn -and
   ([] true)
   ([x] x)
@@ -73,5 +76,5 @@
   (apply hash-map (interleave (keys m) (map f (vals m)))))
 
 (def core-macros
-  (->> {'and -and, 'defn -defn, 'let -let, 'or -or, 'when -when}
+  (->> {'and -and, 'defmacro -defmacro, 'defn -defn, 'let -let, 'or -or, 'when -when}
     (map-vals #(with-meta % {:macro true}))))
