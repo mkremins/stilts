@@ -9,11 +9,14 @@
 (def ^:dynamic *repl-env* stilts/default-env)
 
 (defn eval-print! [interface line]
-  (let [form (rdr/read-string line)
-        [res env] (stilts/eval form *repl-env*)]
-    (set! *repl-env* env)
-    (prn res)
-    (.prompt interface)))
+  (try (let [form (rdr/read-string line)
+             [res env] (stilts/eval form *repl-env*)]
+         (set! *repl-env* env)
+         (prn res))
+       (catch js/Error e
+         (println (str "Error: " (.-message e))))
+       (finally
+         (.prompt interface))))
 
 (defn -main []
   (let [opts #js {:input (.-stdin js/process) :output (.-stdout js/process)}
