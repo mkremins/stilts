@@ -3,28 +3,26 @@
   (:require [clojure.walk :as walk]
             [stilts.macros :as macros]))
 
-(def default-env
-  {:globals (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
-                 'aget aget, 'get get, 'list list, 'nth nth, 'nthnext nthnext}
-              (merge macros/core-macros))})
+;; symbol resolution
 
-(def undefined (js/Object.))
+(def undefined
+  "Sentinel value returned by `resolve` in the event that the symbol to be
+   resolved is unbound in the evaluation environment."
+  (js/Object.))
 
-(defn resolve [sym env]
+(defn resolve
+  "Looks up the symbol `sym` in the environment map `env` and returns the bound
+   value, or `undefined` if `env` contains no binding for `sym`."
+  [sym env]
   (let [local (get-in env [:locals sym] undefined)]
     (if (= local undefined)
       (get-in env [:globals sym] undefined)
       local)))
 
-(deftype RecurThunk [args]) ; represents a `(recur ...)` special form
-
 ;; macroexpansion
 
-(defn macro? [f]
-  (:macro (meta f)))
-
 (defn macroexpand-1 [form env]
-  (if (and (seq? form) (macro? (resolve (first form) env)))
+  (if (and (seq? form) (-> (first form) (resolve env) meta :macro))
     (apply (resolve (first form) env) (rest form))
     form))
 
@@ -57,7 +55,9 @@
 
 (declare eval-exp)
 
-(defmulti eval-seq (fn [exp _] (first exp)))
+(deftype RecurThunk [args]) ; represents a `(recur ...)` special form
+
+(defmulti ^:private eval-seq (fn [exp _] (first exp)))
 
 (defmethod eval-seq :default [exp env]
   (let [vs (map #(first (eval-exp % env)) exp)]
@@ -144,7 +144,7 @@
 
 ;; generic evaluation
 
-(defn eval-exp [exp env]
+(defn- eval-exp [exp env]
   (let [eval-subexp #(first (eval-exp % env))]
     (condp apply [exp]
       map? [(->> (interleave (keys exp) (vals exp))
@@ -157,13 +157,27 @@
       vector? [(mapv eval-subexp exp) env]
       [exp env])))
 
+(def default-env
+  "The default environment map for `eval` and `eval-all`, used as a fallback in
+   the event that the caller doesn't provide an environment."
+  {:globals (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
+                 'aget aget, 'get get, 'list list, 'nth nth, 'nthnext nthnext}
+              (merge macros/core-macros))})
+
 (defn eval
+  "Evaluates a Clojure `form` within the context of an optional environment map
+   `env`. Returns a vector `[res env']` in which `res` is the value of the
+   evaluated form and `env'` is a potentially updated copy of `env`."
   ([form]
     (eval form default-env))
   ([form env]
     (-> form (macroexpand-all env) normalize-all-interop (eval-exp env))))
 
 (defn eval-all
+  "Evaluates a seq of Clojure `forms` in order within the context of an
+   optional environment map `env`. Like `eval`, returns a vector `[res env']`
+   in which `res` is the value of the last evaluated form and `env'` is a
+   potentially updated copy of `env`."
   ([forms]
     (eval-all forms default-env))
   ([forms env]
