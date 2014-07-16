@@ -21,7 +21,9 @@
          (if (= (.-message e) "EOF while reading")
            (do (.setPrompt interface "  #_=> ")
                (swap! code-buffer conj (str line " ")))
-           (println (str "Error: " (.-message e)))))
+           (do (.setPrompt interface "user=> ")
+               (reset! code-buffer [])
+               (println (str "Error: " (.-message e))))))
        (finally
          (.prompt interface))))
 
