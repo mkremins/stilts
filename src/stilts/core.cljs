@@ -67,6 +67,7 @@
   [() env])
 
 (defmethod eval-seq 'def [[_ sym arg] env]
+  (assert (symbol? sym) "first argument to def must be a symbol")
   (let [[v env'] (eval-exp arg env)
         v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
     [v (assoc-in env' [:globals sym] v)]))
