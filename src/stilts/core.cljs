@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [eval macroexpand macroexpand-1 resolve])
   (:require [clojure.walk :as walk]
             [medley.core :refer [update]]
-            [stilts.macros :as macros]))
+            [stilts.stdlib :as stdlib]))
 
 ;; symbol resolution
 
@@ -181,9 +181,7 @@
 (def default-env
   "The default environment map for `eval` and `eval-all`, used as a fallback in
    the event that the caller doesn't provide an environment."
-  {:globals (-> {'+ +, '- -, '* *, '/ /, '< <, '<= <=, '> >, '>= >=, '= =,
-                 'aget aget, 'get get, 'list list, 'nth nth, 'nthnext nthnext}
-              (merge macros/core-macros))})
+  {:globals (merge stdlib/core-functions stdlib/core-macros)})
 
 (defn eval
   "Evaluates a Clojure `form` within the context of an optional environment map
