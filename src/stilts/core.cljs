@@ -52,28 +52,21 @@
 (defn normalize-all-interop [form]
   (walk/prewalk normalize-interop form))
 
-;; special forms + function application
+;; special forms
 
 (declare eval-exp)
 
 (deftype RecurThunk [args]) ; represents a `(recur ...)` special form
 
-(defmulti ^:private eval-seq (fn [exp _] (first exp)))
+(defmulti ^:private eval-special (fn [exp _] (first exp)))
 
-(defmethod eval-seq :default [exp env]
-  (let [vs (map #(first (eval-exp % env)) exp)]
-    [(apply (first vs) (rest vs)) env]))
-
-(defmethod eval-seq nil [_ env]
-  [() env])
-
-(defmethod eval-seq 'def [[_ sym arg] env]
+(defmethod eval-special 'def [[_ sym arg] env]
   (assert (symbol? sym) "first argument to def must be a symbol")
   (let [[v env'] (eval-exp arg env)
         v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
     [v (assoc-in env' [:globals sym] v)]))
 
-(defmethod eval-seq 'do [[_ & statements] env]
+(defmethod eval-special 'do [[_ & statements] env]
   (let [return (last statements)]
     (loop [statements (butlast statements)
            st-env (dissoc env :recur-arity)]
@@ -84,7 +77,7 @@
                            (assoc st-env :recur-arity recur-arity)
                            st-env))))))
 
-(defmethod eval-seq 'if [[_ test then else] env]
+(defmethod eval-special 'if [[_ test then else] env]
   (let [[test-v env'] (eval-exp test env)]
     (eval-exp (if test-v then else) env')))
 
@@ -105,7 +98,7 @@
             arglist)
           args))
 
-(defmethod eval-seq 'fn* [[_ & clauses] env]
+(defmethod eval-special 'fn* [[_ & clauses] env]
   (let [arities (map (comp arity first) clauses)
         clause-for-arity (zipmap arities clauses)
         max-fixed-arity (apply max (remove #{:variadic} arities))]
@@ -121,7 +114,7 @@
                  v)))
            (throw (js/Error. "no matching clause for arity"))))) env]))
 
-(defmethod eval-seq 'let* [[_ bvec body] env]
+(defmethod eval-special 'let* [[_ bvec body] env]
   (loop [bpairs (partition 2 bvec) benv env]
     (if-let [[bsym bform] (first bpairs)]
       (let [[v benv'] (eval-exp bform benv)]
@@ -129,7 +122,7 @@
       (let [[v benv'] (eval-exp body benv)]
         [v (dissoc benv' :locals)]))))
 
-(defmethod eval-seq 'loop* [[_ bvec body] env]
+(defmethod eval-special 'loop* [[_ bvec body] env]
   (let [bpairs (partition 2 bvec)
         bsyms (map first bpairs)
         recur-arity (count bpairs)]
@@ -142,35 +135,43 @@
             (recur (map vector bsyms (.-args v)) env)
             [v (dissoc benv' :locals :recur-arity)]))))))
 
-(defmethod eval-seq 'quote [[_ arg] env]
+(defmethod eval-special 'quote [[_ arg] env]
   [arg env])
 
-(defmethod eval-seq 'recur [[_ & args] env]
+(defmethod eval-special 'recur [[_ & args] env]
   (let [arity (:recur-arity env)
         argc (count args)]
     (assert arity "can only recur from tail position within fn*/loop* body")
     (assert (= arity argc) (str "expected " arity " args to recur, but got " argc)))
   [(RecurThunk. (map #(first (eval-exp % (dissoc env :recur-arity))) args)) env])
 
-(defmethod eval-seq 'throw [[_ arg] env]
+(defmethod eval-special 'throw [[_ arg] env]
   (let [[thrown _] (eval-exp arg env)]
     (if-let [[_ local body] (:catch env)]
       (let [[v env'] (eval-exp body (-> env (assoc-in [:locals local] thrown) (dissoc :catch)))]
         [v (dissoc env' :locals)])
       (throw (js/Error. "evaluated code threw an uncaught exception")))))
 
-(defmethod eval-seq 'try [[_ body catch] env]
+(defmethod eval-special 'try [[_ body catch] env]
   (eval-exp body (assoc env :catch catch)))
 
 ;; generic evaluation
 
+(defn- invoke? [exp]
+  (and (seq? exp) (seq exp)))
+
+(defn- special? [exp]
+  (and (seq? exp) (get-method eval-special (first exp))))
+
 (defn- eval-exp [exp env]
   (let [eval-subexp #(first (eval-exp % env))]
     (condp apply [exp]
+      special? (eval-special exp env)
+      invoke? (let [[f & args] (map eval-subexp exp)]
+                [(apply f args) env])
       map? [(->> (interleave (keys exp) (vals exp))
               (map eval-subexp)
               (apply hash-map)) env]
-      seq? (eval-seq exp env)
       set? [(set (map eval-subexp exp)) env]
       symbol? (do (assert (not= (resolve exp env) undefined) (str "var " exp " is not defined"))
                   [(resolve exp env) env])
