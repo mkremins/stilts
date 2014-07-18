@@ -150,7 +150,7 @@
         argc (count args)]
     (assert arity "can only recur from tail position within fn*/loop* body")
     (assert (= arity argc) (str "expected " arity " args to recur, but got " argc)))
-  [(RecurThunk. (map #(first (eval-exp % env)) args)) env])
+  [(RecurThunk. (map #(first (eval-exp % (dissoc env :recur-arity))) args)) env])
 
 (defmethod eval-seq 'throw [[_ arg] env]
   (let [[thrown _] (eval-exp arg env)]
