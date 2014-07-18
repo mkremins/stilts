@@ -1,6 +1,7 @@
 (ns stilts.core
   (:refer-clojure :exclude [eval macroexpand macroexpand-1 resolve])
   (:require [clojure.walk :as walk]
+            [medley.core :refer [update]]
             [stilts.macros :as macros]))
 
 ;; symbol resolution
@@ -87,19 +88,38 @@
   (let [[test-v env'] (eval-exp test env)]
     (eval-exp (if test-v then else) env')))
 
+(defn- arity [arglist]
+  (if (= (last (butlast arglist)) '&)
+    :variadic
+    (count arglist)))
+
+(defn- bind-args [arglist args]
+  (if (= (arity arglist) :variadic)
+    (let [[fixed-args rest-args] (split-at (- (count arglist) 2) args)]
+      (-> (zipmap arglist fixed-args) (assoc (last arglist) rest-args)))
+    (zipmap arglist args)))
+
+(defn- bind-recur-args [arglist args]
+  (zipmap (if (= (arity arglist) :variadic)
+            (concat (drop-last 2 arglist) [(last arglist)])
+            arglist)
+          args))
+
 (defmethod eval-seq 'fn* [[_ & clauses] env]
-  (let [clauses (if (vector? (first clauses))
-                  [[(first clauses) (second clauses)]]
-                  clauses)
-        clause-for-argc (zipmap (map (comp count first) clauses) clauses)]
+  (let [arities (map (comp arity first) clauses)
+        clause-for-arity (zipmap arities clauses)
+        max-fixed-arity (apply max (remove #{:variadic} arities))]
     [(fn [& args]
-       (if-let [[arg-names body] (clause-for-argc (count args))]
-         (loop [benv (update-in env [:locals] merge (zipmap arg-names args))]
-           (let [[v _] (eval-exp body (assoc benv :recur-arity (count args)))]
-             (if (instance? RecurThunk v)
-               (recur (update-in env [:locals] merge (zipmap arg-names (.-args v))))
-               v)))
-         (throw (js/Error. "no matching clause for arg count")))) env]))
+       (let [argc (count args)
+             invoke-arity (if (> argc max-fixed-arity) :variadic argc)
+             recur-arity (if (= invoke-arity :variadic) (inc max-fixed-arity) argc)]
+         (if-let [[arglist body] (clause-for-arity invoke-arity)]
+           (loop [benv (update env :locals merge (bind-args arglist args))]
+             (let [[v _] (eval-exp body (assoc benv :recur-arity recur-arity))]
+               (if (instance? RecurThunk v)
+                 (recur (update env :locals merge (bind-recur-args arglist (.-args v))))
+                 v)))
+           (throw (js/Error. "no matching clause for arity"))))) env]))
 
 (defmethod eval-seq 'let* [[_ bvec body] env]
   (loop [bpairs (partition 2 bvec) benv env]

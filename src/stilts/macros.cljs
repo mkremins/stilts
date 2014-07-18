@@ -1,10 +1,16 @@
-(ns stilts.macros)
+(ns stilts.macros
+  (:require [medley.core :refer [map-vals]]))
 
-(defn -defn [name args & body]
-  `(def ~name (fn* ~args (do ~@body))))
+(defn -fn [& clauses]
+  (if (vector? (first clauses))
+    `(fn* (~(first clauses) ~(second clauses)))
+    `(fn* ~@clauses)))
 
-(defn -defmacro [name args & body]
-  `(~'defn ~(with-meta name {:macro true}) ~args ~@body))
+(defn -defn [name & clauses]
+  `(def ~name (~'fn ~@clauses)))
+
+(defn -defmacro [name & clauses]
+  `(~'defn ~(with-meta name {:macro true}) ~@clauses))
 
 (defn -and
   ([] true)
@@ -72,9 +78,6 @@
 
 ;; tying it all together
 
-(defn map-vals [f m]
-  (apply hash-map (interleave (keys m) (map f (vals m)))))
-
 (def core-macros
-  (->> {'and -and, 'defmacro -defmacro, 'defn -defn, 'let -let, 'or -or, 'when -when}
+  (->> {'and -and, 'defmacro -defmacro, 'defn -defn, 'fn -fn, 'let -let, 'or -or, 'when -when}
     (map-vals #(with-meta % {:macro true}))))
