@@ -25,3 +25,7 @@ I still want `eval` for ClojureScript. I still don't have `eval` for ClojureScri
 ## Usage
 
 Don't.
+
+## License
+
+[MIT License](http://opensource.org/licenses/MIT). Hack away.
