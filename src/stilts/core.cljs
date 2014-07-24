@@ -62,7 +62,7 @@
 
 (defmethod eval-special 'def [[_ sym arg] env]
   (assert (symbol? sym) "first argument to def must be a symbol")
-  (let [[v env'] (eval-exp arg env)
+  (let [[v env'] (eval-exp arg (dissoc env :recur-arity))
         v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
     [v (assoc-in env' [:globals sym] v)]))
 
@@ -73,13 +73,11 @@
       (if-let [statement (first statements)]
         (let [[_ env'] (eval-exp statement st-env)]
           (recur (rest statements) env'))
-        (eval-exp return (if-let [recur-arity (:recur-arity env)]
-                           (assoc st-env :recur-arity recur-arity)
-                           st-env))))))
+        (eval-exp return (assoc st-env :recur-arity (:recur-arity env)))))))
 
 (defmethod eval-special 'if [[_ test then else] env]
-  (let [[test-v env'] (eval-exp test env)]
-    (eval-exp (if test-v then else) env')))
+  (let [[test-v env'] (eval-exp test (dissoc env :recur-arity))]
+    (eval-exp (if test-v then else) (assoc env' :recur-arity (:recur-arity env)))))
 
 (defn- arity [arglist]
   (if (= (last (butlast arglist)) '&)
@@ -115,28 +113,30 @@
            (throw (js/Error. "no matching clause for arity"))))) env]))
 
 (defmethod eval-special 'let* [[_ bvec body] env]
-  (loop [bpairs (partition 2 bvec) benv env]
+  (loop [bpairs (partition 2 bvec)
+         benv (dissoc env :recur-arity)]
     (if-let [[bsym bform] (first bpairs)]
       (let [[v benv'] (eval-exp bform benv)]
         (recur (rest bpairs) (assoc-in benv' [:locals bsym] v)))
-      (let [[v benv'] (eval-exp body benv)]
+      (let [[v benv'] (eval-exp body (assoc benv :recur-arity (:recur-arity env)))]
         [v (dissoc benv' :locals)]))))
 
 (defmethod eval-special 'loop* [[_ bvec body] env]
   (let [bpairs (partition 2 bvec)
         bsyms (map first bpairs)
         recur-arity (count bpairs)]
-    (loop [bpairs bpairs benv env]
+    (loop [bpairs bpairs
+           benv (dissoc env :recur-arity)]
       (if-let [[bsym bform] (first bpairs)]
         (let [[v benv'] (eval-exp bform benv)]
           (recur (rest bpairs) (assoc-in benv' [:locals bsym] v)))
         (let [[v benv'] (eval-exp body (assoc benv :recur-arity recur-arity))]
           (if (instance? RecurThunk v)
             (recur (map vector bsyms (.-args v)) env)
-            [v (dissoc benv' :locals :recur-arity)]))))))
+            [v (dissoc benv' :locals)]))))))
 
 (defmethod eval-special 'quote [[_ arg] env]
-  [arg env])
+  [arg (dissoc env :recur-arity)])
 
 (defmethod eval-special 'recur [[_ & args] env]
   (let [arity (:recur-arity env)
@@ -146,14 +146,14 @@
   [(RecurThunk. (map #(first (eval-exp % (dissoc env :recur-arity))) args)) env])
 
 (defmethod eval-special 'throw [[_ arg] env]
-  (let [[thrown _] (eval-exp arg env)]
+  (let [[thrown _] (eval-exp arg (dissoc env :recur-arity))]
     (if-let [[_ local body] (:catch env)]
       (let [[v env'] (eval-exp body (-> env (assoc-in [:locals local] thrown) (dissoc :catch)))]
         [v (dissoc env' :locals)])
       (throw (js/Error. "evaluated code threw an uncaught exception")))))
 
 (defmethod eval-special 'try [[_ body catch] env]
-  (eval-exp body (assoc env :catch catch)))
+  (eval-exp body (-> env (assoc :catch catch) (dissoc :recur-arity))))
 
 ;; generic evaluation
 
@@ -164,19 +164,20 @@
   (and (seq? exp) (get-method eval-special (first exp))))
 
 (defn- eval-exp [exp env]
-  (let [eval-subexp #(first (eval-exp % env))]
+  (let [env' (dissoc env :recur-arity)
+        eval-subexp #(first (eval-exp % env'))]
     (condp apply [exp]
-      special? (eval-special exp env)
+      special? (eval-special exp env) ; use original env to pass on recur arity
       invoke? (let [[f & args] (map eval-subexp exp)]
-                [(apply f args) env])
+                [(apply f args) env'])
       map? [(->> (interleave (keys exp) (vals exp))
               (map eval-subexp)
-              (apply hash-map)) env]
-      set? [(set (map eval-subexp exp)) env]
+              (apply hash-map)) env']
+      set? [(set (map eval-subexp exp)) env']
       symbol? (do (assert (not= (resolve exp env) undefined) (str "var " exp " is not defined"))
-                  [(resolve exp env) env])
-      vector? [(mapv eval-subexp exp) env]
-      [exp env])))
+                  [(resolve exp env) env'])
+      vector? [(mapv eval-subexp exp) env']
+      [exp env'])))
 
 (def default-env
   "The default environment map for `eval` and `eval-all`, used as a fallback in
