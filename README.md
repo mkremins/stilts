@@ -13,7 +13,6 @@ I still want `eval` for ClojureScript. I still don't have `eval` for ClojureScri
 * Macroexpansion and runtime `defmacro`
 * Precise control over the evaluation environment
 * A command-line REPL via node.js
-* JS interop via `cljs.core/aget`
 
 ### Stuff I want
 * See the [issue tracker](https://github.com/mkremins/stilts/issues?state=open)
