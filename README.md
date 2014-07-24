@@ -18,10 +18,6 @@ I still want `eval` for ClojureScript. I still don't have `eval` for ClojureScri
 ### Stuff I want
 * See the [issue tracker](https://github.com/mkremins/stilts/issues?state=open)
 
-### Stuff I don't want to think about right now 
-* Namespaces
-* Parsing (just use `cljs.reader`)
-
 ## Usage
 
 Don't.
