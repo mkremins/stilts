@@ -146,7 +146,7 @@
   [(RecurThunk. (map #(first (eval-exp % (dissoc env :recur-arity))) args)) env])
 
 (defmethod eval-special 'throw [[_ arg] env]
-  (let [[thrown _] (eval-exp arg (dissoc env :recur-arity))]
+  (let [[thrown _] (eval-exp arg env)]
     (if-let [[_ local body] (:catch env)]
       (let [[v env'] (eval-exp body (-> env (assoc-in [:locals local] thrown) (dissoc :catch)))]
         [v (dissoc env' :locals)])
