@@ -85,14 +85,13 @@
         clause-for-arity (zipmap arities clauses)
         max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
     [(fn [& args]
-       (let [argc (count args)
-             variadic? (> argc max-fixed-arity)]
-         (if-let [[arglist body] (clause-for-arity (if variadic? :variadic argc))]
-           (let [recur-arity (if variadic? (count (remove '#{&} arglist)) argc)]
-             (loop [benv (update env :locals merge (bind-args arglist args))]
-               (let [[v _] (eval-exp body (assoc benv :recur-arity recur-arity))]
+       (let [argc (count args)]
+         (if-let [[arglist body] (clause-for-arity (if (> argc max-fixed-arity) :variadic argc))]
+           (let [benv (assoc env :recur-arity (count (remove '#{&} arglist)))]
+             (loop [locals (bind-args arglist args)]
+               (let [[v _] (eval-exp body (update benv :locals merge locals))]
                  (if (instance? RecurThunk v)
-                   (recur (update env :locals merge (bind-recur-args arglist (.-args v))))
+                   (recur (bind-recur-args arglist (.-args v)))
                    v))))
            (throw (js/Error. "no matching clause for arity"))))) env]))
 
