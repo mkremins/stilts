@@ -75,10 +75,10 @@
     (zipmap arglist args)))
 
 (defn- bind-recur-args [arglist args]
-  (zipmap (if (= (arity arglist) :variadic)
-            (concat (drop-last 2 arglist) [(last arglist)])
-            arglist)
-          args))
+  (if (= (arity arglist) :variadic)
+    (do (assert (rest (last args)) "last arg to variadic recur must be seqable or nil")
+        (zipmap (remove '#{&} arglist) args))
+    (zipmap arglist args)))
 
 (defmethod eval-special 'fn* [[_ & clauses] env]
   (let [arities (map (comp arity first) clauses)
