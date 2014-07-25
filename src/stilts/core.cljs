@@ -83,17 +83,17 @@
 (defmethod eval-special 'fn* [[_ & clauses] env]
   (let [arities (map (comp arity first) clauses)
         clause-for-arity (zipmap arities clauses)
-        max-fixed-arity (apply max (remove #{:variadic} arities))]
+        max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
     [(fn [& args]
        (let [argc (count args)
-             invoke-arity (if (> argc max-fixed-arity) :variadic argc)
-             recur-arity (if (= invoke-arity :variadic) (inc max-fixed-arity) argc)]
-         (if-let [[arglist body] (clause-for-arity invoke-arity)]
-           (loop [benv (update env :locals merge (bind-args arglist args))]
-             (let [[v _] (eval-exp body (assoc benv :recur-arity recur-arity))]
-               (if (instance? RecurThunk v)
-                 (recur (update env :locals merge (bind-recur-args arglist (.-args v))))
-                 v)))
+             variadic? (> argc max-fixed-arity)]
+         (if-let [[arglist body] (clause-for-arity (if variadic? :variadic argc))]
+           (let [recur-arity (if variadic? (count (remove '#{&} arglist)) argc)]
+             (loop [benv (update env :locals merge (bind-args arglist args))]
+               (let [[v _] (eval-exp body (assoc benv :recur-arity recur-arity))]
+                 (if (instance? RecurThunk v)
+                   (recur (update env :locals merge (bind-recur-args arglist (.-args v))))
+                   v))))
            (throw (js/Error. "no matching clause for arity"))))) env]))
 
 (defmethod eval-special 'let* [[_ bvec body] env]
