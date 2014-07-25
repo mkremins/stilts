@@ -74,12 +74,6 @@
       (-> (zipmap arglist fixed-args) (assoc (last arglist) rest-args)))
     (zipmap arglist args)))
 
-(defn- bind-recur-args [arglist args]
-  (if (= (arity arglist) :variadic)
-    (do (assert (rest (last args)) "last arg to variadic recur must be seqable or nil")
-        (zipmap (remove '#{&} arglist) args))
-    (zipmap arglist args)))
-
 (defmethod eval-special 'fn* [[_ & clauses] env]
   (let [arities (map (comp arity first) clauses)
         clause-for-arity (zipmap arities clauses)
@@ -87,11 +81,12 @@
     [(fn [& args]
        (let [argc (count args)]
          (if-let [[arglist body] (clause-for-arity (if (> argc max-fixed-arity) :variadic argc))]
-           (let [benv (assoc env :recur-arity (count (remove '#{&} arglist)))]
+           (let [argsyms (remove '#{&} arglist)
+                 benv (assoc env :recur-arity (count argsyms))]
              (loop [locals (bind-args arglist args)]
                (let [[v _] (eval-exp body (update benv :locals merge locals))]
                  (if (instance? RecurThunk v)
-                   (recur (bind-recur-args arglist (.-args v)))
+                   (recur (zipmap argsyms (.-args v)))
                    v))))
            (throw (js/Error. "no matching clause for arity"))))) env]))
 
