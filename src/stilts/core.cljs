@@ -82,7 +82,7 @@
        (let [argc (count args)]
          (if-let [[arglist body] (clause-for-arity (if (> argc max-fixed-arity) :variadic argc))]
            (let [argsyms (remove '#{&} arglist)
-                 benv (assoc env :recur-arity (count argsyms))]
+                 benv (assoc env :recur-arity (count argsyms) :variadic-recur? true)]
              (loop [locals (bind-args arglist args)]
                (let [[v _] (eval-exp body (update benv :locals merge locals))]
                  (if (instance? RecurThunk v)
@@ -120,7 +120,9 @@
   (let [arity (:recur-arity env)
         argc (count args)]
     (assert arity "can only recur from tail position within fn*/loop* body")
-    (assert (= arity argc) (str "expected " arity " args to recur, but got " argc)))
+    (assert (= arity argc) (str "expected " arity " args to recur, but got " argc))
+    (when (:variadic-recur? env)
+      (assert (rest (last args)) "last arg to recur within variadic fn must be seqable or nil")))
   [(RecurThunk. (map #(first (eval-exp % (dissoc env :recur-arity))) args)) env])
 
 (defmethod eval-special 'throw [[_ arg] env]
