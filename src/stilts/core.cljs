@@ -11,14 +11,25 @@
    resolved is unbound in the evaluation environment."
   (js/Object.))
 
+(defn resolve-ns
+  "Looks up the namespace named by the symbol `ns-sym` in the environment map
+   `env` and returns the namespace's full name, or nil if not found."
+  [ns-sym env]
+  (or (get-in env [:namespaces (:ns env) :aliases ns-sym])
+      (get-in env [:namespaces ns-sym :ns])))
+
 (defn resolve
   "Looks up the symbol `sym` in the environment map `env` and returns the bound
-   value, or `undefined` if `env` contains no binding for `sym`."
+   value, or `undefined` if `env` contains no binding for `sym`. If `sym` is
+   namespaced, attempts to resolve the namespace using `resolve-ns`."
   [sym env]
-  (let [local (get-in env [:locals sym] undefined)]
-    (if (= local undefined)
-      (get-in env [:globals sym] undefined)
-      local)))
+  (if-let [ns-name (namespace sym)]
+    (if-let [full-ns (resolve-ns (symbol ns-name) env)]
+      (get-in env [:namespaces full-ns :mappings (symbol (name sym))] undefined)
+      undefined)
+    (if (contains? (:locals env) sym)
+      (get-in env [:locals sym])
+      (get-in env [:namespaces (:ns env) :mappings sym] undefined))))
 
 ;; macroexpansion
 
@@ -46,9 +57,10 @@
 
 (defmethod eval-special 'def [[_ sym arg] env]
   (assert (symbol? sym) "first argument to def must be a symbol")
+  (assert (not (namespace sym)) "can't def a namespace-qualified symbol")
   (let [[v env'] (eval-exp arg (dissoc env :recur-arity))
         v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
-    [v (assoc-in env' [:globals sym] v)]))
+    [v (assoc-in env' [:namespaces (:ns env') :mappings sym] v)]))
 
 (defmethod eval-special 'do [[_ & statements] env]
   (let [return (last statements)]
@@ -162,7 +174,11 @@
 (def default-env
   "The default environment map for `eval` and `eval-all`, used as a fallback in
    the event that the caller doesn't provide an environment."
-  {:globals (merge stdlib/core-functions stdlib/core-macros)})
+  {:namespaces
+   {'user
+    {:mappings (merge stdlib/core-functions stdlib/core-macros)
+     :ns 'user}}
+   :ns 'user})
 
 (defn eval
   "Evaluates a Clojure `form` within the context of an optional environment map
