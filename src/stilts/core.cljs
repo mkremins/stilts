@@ -57,11 +57,13 @@
 
 (deftype RecurThunk [args]) ; represents a `(recur ...)` special form
 
+(defn- valid-binding-form? [x]
+  (and (symbol? x) (not (namespace x))))
+
 (defmulti ^:private eval-special (fn [exp _] (first exp)))
 
 (defmethod eval-special 'def [[_ sym arg] env]
-  (assert (symbol? sym) "first argument to def must be a symbol")
-  (assert (not (namespace sym)) "can't def a namespace-qualified symbol")
+  (assert (valid-binding-form? sym) "first argument to def must be a non-namespaced symbol")
   (let [[v env'] (eval-exp arg (dissoc env :recur-arity))
         v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
     [v (assoc-in env' [:namespaces (:ns env') :mappings sym] v)]))
@@ -80,6 +82,7 @@
     (eval-exp (if test-v then else) (assoc env' :recur-arity (:recur-arity env)))))
 
 (defmethod eval-special 'in-ns [[_ ns-sym] env]
+  (assert (valid-binding-form? ns-sym) "namespace name must be a non-namespaced symbol")
   [nil (-> env
          (update-in [:namespaces ns-sym :mappings] #(or % core-mappings))
          (update-in [:namespaces ns-sym :ns] #(or % ns-sym))
@@ -97,7 +100,10 @@
     (zipmap arglist args)))
 
 (defmethod eval-special 'fn* [[_ & clauses] env]
-  (let [arities (map (comp arity first) clauses)
+  (let [arglists (map first clauses)
+        _ (assert (every? #(every? valid-binding-form? %) arglists)
+                  "fn params must be non-namespaced symbols")
+        arities (map arity arglists)
         clause-for-arity (zipmap arities clauses)
         max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
     [(fn [& args]
@@ -113,18 +119,23 @@
            (throw (js/Error. "no matching clause for arity"))))) env]))
 
 (defmethod eval-special 'let* [[_ bvec body] env]
-  (loop [bpairs (partition 2 bvec)
-         benv (dissoc env :recur-arity)]
-    (if-let [[bsym bform] (first bpairs)]
-      (let [[v benv'] (eval-exp bform benv)]
-        (recur (rest bpairs) (assoc-in benv' [:locals bsym] v)))
-      (let [[v benv'] (eval-exp body (assoc benv :recur-arity (:recur-arity env)))]
-        [v (dissoc benv' :locals)]))))
+  (let [bpairs (partition 2 bvec)]
+    (assert (every? valid-binding-form? (map first bpairs))
+            "let binding names must be non-namespaced symbols")
+    (loop [bpairs bpairs
+           benv (dissoc env :recur-arity)]
+      (if-let [[bsym bform] (first bpairs)]
+        (let [[v benv'] (eval-exp bform benv)]
+          (recur (rest bpairs) (assoc-in benv' [:locals bsym] v)))
+        (let [[v benv'] (eval-exp body (assoc benv :recur-arity (:recur-arity env)))]
+          [v (dissoc benv' :locals)])))))
 
 (defmethod eval-special 'loop* [[_ bvec body] env]
   (let [bpairs (partition 2 bvec)
         bsyms (map first bpairs)
         recur-arity (count bpairs)]
+    (assert (every? valid-binding-form? bsyms)
+            "loop binding names must be non-namespaced symbols")
     (loop [bpairs bpairs
            benv (dissoc env :recur-arity)]
       (if-let [[bsym bform] (first bpairs)]
@@ -154,7 +165,8 @@
         [v (dissoc env' :locals)])
       (throw (js/Error. "evaluated code threw an uncaught exception")))))
 
-(defmethod eval-special 'try [[_ body catch] env]
+(defmethod eval-special 'try [[_ body [_ local :as catch]] env]
+  (assert (valid-binding-form? local) "caught exception name must be a non-namespaced symbol")
   (eval-exp body (-> env (assoc :catch catch) (dissoc :recur-arity))))
 
 ;; generic evaluation
