@@ -31,10 +31,14 @@
       (get-in env [:locals sym])
       (get-in env [:namespaces (:ns env) :mappings sym] undefined))))
 
+(def core-mappings
+  (merge stdlib/core-functions stdlib/core-macros))
+
 ;; macroexpansion
 
 (defn macroexpand-1 [form env]
-  (if (and (seq? form) (-> (first form) (resolve env) meta :macro))
+  (if (and (seq? form) (symbol? (first form))
+           (-> (first form) (resolve env) meta :macro))
     (apply (resolve (first form) env) (rest form))
     form))
 
@@ -74,6 +78,12 @@
 (defmethod eval-special 'if [[_ test then else] env]
   (let [[test-v env'] (eval-exp test (dissoc env :recur-arity))]
     (eval-exp (if test-v then else) (assoc env' :recur-arity (:recur-arity env)))))
+
+(defmethod eval-special 'in-ns [[_ ns-sym] env]
+  [nil (-> env
+         (update-in [:namespaces ns-sym :mappings] #(or % core-mappings))
+         (update-in [:namespaces ns-sym :ns] #(or % ns-sym))
+         (assoc :ns ns-sym))])
 
 (defn- arity [arglist]
   (if (= (last (butlast arglist)) '&)
@@ -174,10 +184,7 @@
 (def default-env
   "The default environment map for `eval` and `eval-all`, used as a fallback in
    the event that the caller doesn't provide an environment."
-  {:namespaces
-   {'user
-    {:mappings (merge stdlib/core-functions stdlib/core-macros)
-     :ns 'user}}
+  {:namespaces {'user {:mappings core-mappings :ns 'user}}
    :ns 'user})
 
 (defn eval
