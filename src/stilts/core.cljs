@@ -191,8 +191,9 @@
               (map eval-subexp)
               (apply hash-map)) env']
       set? [(set (map eval-subexp exp)) env']
-      symbol? (do (assert (not= (resolve exp env) undefined) (str "var " exp " is not defined"))
-                  [(resolve exp env) env'])
+      symbol? (let [v (resolve exp env)]
+                (assert (not= v undefined) (str "var " exp " is not defined"))
+                [v env'])
       vector? [(mapv eval-subexp exp) env']
       [exp env'])))
 
