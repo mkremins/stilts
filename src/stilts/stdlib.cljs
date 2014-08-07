@@ -28,11 +28,6 @@
 
 ;; macros
 
-(defn -fn [& clauses]
-  (if (vector? (first clauses))
-    `(fn* (~(first clauses) ~(second clauses)))
-    `(fn* ~@clauses)))
-
 (defn -defn [name & clauses]
   `(def ~name (~'fn ~@clauses)))
 
@@ -97,6 +92,16 @@
   PersistentVector
   (-bindings [this expr]
     (vec-bindings this expr)))
+
+(defn -fn [& clauses]
+  (let [clauses (if (vector? (first clauses)) (list clauses) clauses)]
+    `(fn* ~@(map (fn [[arglist & body]]
+                   (let [gensyms (repeatedly gensym)
+                         genargs (zipmap (remove '#{&} arglist) gensyms)]
+                     `(~(mapv #(get genargs % %) arglist) ; replace bforms with gensyms in arglist
+                       (~'let [~@(interleave (keys genargs) (vals genargs))]
+                         ~@body))))
+                 clauses))))
 
 (defn -let [bvec & body]
   (let [bpairs (mapcat #(apply -bindings %) (partition 2 bvec))]
