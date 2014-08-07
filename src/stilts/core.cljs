@@ -104,6 +104,8 @@
         _ (assert (every? #(every? valid-binding-form? %) arglists)
                   "fn params must be non-namespaced symbols")
         arities (map arity arglists)
+        _ (assert (<= (count (filter #{:variadic} arities)) 1)
+                  "only one variadic clause allowed per function")
         clause-for-arity (zipmap arities clauses)
         max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
     [(fn [& args]
