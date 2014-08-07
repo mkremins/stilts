@@ -109,10 +109,11 @@
         clause-for-arity (zipmap arities clauses)
         max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
     [(fn [& args]
-       (let [argc (count args)]
-         (if-let [[arglist body] (clause-for-arity (if (> argc max-fixed-arity) :variadic argc))]
+       (let [argc (count args)
+             variadic? (> argc max-fixed-arity)]
+         (if-let [[arglist body] (clause-for-arity (if variadic? :variadic argc))]
            (let [argsyms (remove '#{&} arglist)
-                 benv (assoc env :recur-arity (count argsyms) :variadic-recur? true)]
+                 benv (assoc env :recur-arity (count argsyms) :variadic-recur? variadic?)]
              (loop [locals (bind-args arglist args)]
                (let [[v _] (eval-exp body (update benv :locals merge locals))]
                  (if (instance? RecurThunk v)
