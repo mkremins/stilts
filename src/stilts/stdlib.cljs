@@ -78,20 +78,13 @@
 
 (extend-protocol IBindingForm
   Symbol
-  (-bindings [this expr]
-    [[this expr]])
-
+  (-bindings [this expr] [[this expr]])
   PersistentArrayMap
-  (-bindings [this expr]
-    (map-bindings this expr))
-
+  (-bindings [this expr] (map-bindings this expr))
   PersistentHashMap
-  (-bindings [this expr]
-    (map-bindings this expr))
-
+  (-bindings [this expr] (map-bindings this expr))
   PersistentVector
-  (-bindings [this expr]
-    (vec-bindings this expr)))
+  (-bindings [this expr] (vec-bindings this expr)))
 
 (defn -fn [& clauses]
   (let [clauses (if (vector? (first clauses)) (list clauses) clauses)]
