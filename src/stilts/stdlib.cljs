@@ -103,8 +103,16 @@
     `(let* [~@(apply concat bpairs)]
        (do ~@body))))
 
+(defn -loop [bvec & body]
+  (let [bpairs (partition 2 bvec)
+        gensyms (repeatedly gensym)]
+    `(loop* [~@(interleave gensyms (map second bpairs))]
+       (~'let [~@(interleave (map first bpairs) gensyms)]
+         ~@body))))
+
 ;; tying it all together
 
 (def core-macros
-  (->> {'and -and, 'defmacro -defmacro, 'defn -defn, 'fn -fn, 'let -let, 'or -or, 'when -when}
-    (map-vals #(with-meta % {:macro true}))))
+  (->> {'and -and, 'defmacro -defmacro, 'defn -defn, 'fn -fn, 'let -let, 'loop -loop, 'or -or,
+        'when -when}
+       (map-vals #(with-meta % {:macro true}))))
