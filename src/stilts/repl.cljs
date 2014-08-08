@@ -2,8 +2,6 @@
   (:require [cljs.reader :as rdr]
             [stilts.core :as stilts]))
 
-(enable-console-print!)
-
 (def rl (js/require "readline"))
 
 (def ^:dynamic *repl-env* stilts/default-env)
@@ -34,12 +32,10 @@
        (finally
          (.prompt interface))))
 
-(defn -main []
+(defn start! []
   (let [opts #js {:input (.-stdin js/process) :output (.-stdout js/process)}
         interface (.createInterface rl opts)]
     (doto interface
       (update-prompt!)
       (.prompt)
       (.on "line" (partial eval-print! interface)))))
-
-(set! *main-cli-fn* -main)

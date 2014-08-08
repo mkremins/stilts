@@ -8,6 +8,6 @@
                  [medley "0.5.0"]]
   :plugins [[lein-cljsbuild "1.0.3"]]
   :cljsbuild {:builds [{:source-paths ["src"]
-                        :compiler {:output-to "target/repl.js"
+                        :compiler {:output-to "target/stilts.js"
                                    :optimizations :simple
                                    :target :nodejs}}]})
