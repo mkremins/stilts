@@ -34,23 +34,6 @@
 (def core-mappings
   (merge stdlib/core-functions stdlib/core-macros))
 
-;; macroexpansion
-
-(defn macroexpand-1 [form env]
-  (if (and (seq? form) (symbol? (first form))
-           (-> (first form) (resolve env) meta :macro))
-    (apply (resolve (first form) env) (rest form))
-    form))
-
-(defn macroexpand [form env]
-  (let [expanded (macroexpand-1 form env)]
-    (if (= expanded form)
-      form
-      (recur expanded env))))
-
-(defn macroexpand-all [form env]
-  (walk/prewalk #(macroexpand % env) form))
-
 ;; evaluation utils
 
 (declare eval-exp)
@@ -62,7 +45,11 @@
 
 ;; effectful function application
 
-(deftype StiltsFn [clauses max-fixed-arity])
+(deftype StiltsFn [clauses max-fixed-arity _meta]
+  IMeta
+  (-meta [this] _meta)
+  IWithMeta
+  (-with-meta [this new-meta] (StiltsFn. clauses max-fixed-arity new-meta)))
 
 (defn- arity [arglist]
   (if (= (last (butlast arglist)) '&)
@@ -87,6 +74,28 @@
         (if (instance? RecurThunk ret)
           (recur (zipmap argsyms (.-args ret)))
           [ret (merge env' (select-keys env [:locals :recur-arity :variadic-recur?]))])))))
+
+(defn- eval-invoke [f args env]
+  (if (instance? StiltsFn f)
+    (apply-stilts-fn f args env)
+    [(apply f args) env]))
+
+;; macroexpansion
+
+(defn macroexpand-1 [form env]
+  (if (and (seq? form) (symbol? (first form))
+           (-> (first form) (resolve env) meta :macro))
+    (first (eval-invoke (resolve (first form) env) (rest form) env))
+    form))
+
+(defn macroexpand [form env]
+  (let [expanded (macroexpand-1 form env)]
+    (if (= expanded form)
+      form
+      (recur expanded env))))
+
+(defn macroexpand-all [form env]
+  (walk/prewalk #(macroexpand % env) form))
 
 ;; special forms
 
@@ -126,7 +135,7 @@
         _ (assert (<= (count (filter #{:variadic} arities)) 1)
                   "only one variadic clause allowed per function")
         max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
-    [(StiltsFn. (zipmap arities clauses) max-fixed-arity) env]))
+    [(StiltsFn. (zipmap arities clauses) max-fixed-arity {}) env]))
 
 (defmethod eval-special 'let* [[_ bvec body] env]
   (let [bpairs (partition 2 bvec)]
@@ -193,9 +202,7 @@
     (condp apply [exp]
       special? (eval-special exp env) ; use original env to pass on recur arity
       invoke? (let [[f & args] (map eval-subexp exp)]
-                (if (instance? StiltsFn f)
-                  (apply-stilts-fn f args env')
-                  [(apply f args) env']))
+                (eval-invoke f args env'))
       map? [(->> (interleave (keys exp) (vals exp))
               (map eval-subexp)
               (apply hash-map)) env']
