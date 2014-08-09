@@ -51,14 +51,44 @@
 (defn macroexpand-all [form env]
   (walk/prewalk #(macroexpand % env) form))
 
-;; special forms
+;; evaluation utils
 
 (declare eval-exp)
 
-(deftype RecurThunk [args]) ; represents a `(recur ...)` special form
-
 (defn- valid-binding-form? [x]
   (and (symbol? x) (not (namespace x))))
+
+(deftype RecurThunk [args]) ; represents a `(recur ...)` special form
+
+;; effectful function application
+
+(deftype StiltsFn [clauses max-fixed-arity])
+
+(defn- arity [arglist]
+  (if (= (last (butlast arglist)) '&)
+    :variadic
+    (count arglist)))
+
+(defn- bind-args [arglist args]
+  (if (= (arity arglist) :variadic)
+    (let [[fixed-args rest-args] (split-at (- (count arglist) 2) args)]
+      (-> (zipmap arglist fixed-args) (assoc (last arglist) rest-args)))
+    (zipmap arglist args)))
+
+(defn- apply-stilts-fn [f args env]
+  (let [argc (count args)
+        variadic? (> argc (.-max-fixed-arity f))
+        [arglist body] (get (.-clauses f) (if variadic? :variadic argc))
+        _ (assert arglist "no matching clause for arity")
+        argsyms (remove '#{&} arglist)
+        benv (assoc env :recur-arity (count argsyms) :variadic-recur? variadic?)]
+    (loop [locals (bind-args arglist args)]
+      (let [[ret env'] (eval-exp body (update benv :locals merge locals))]
+        (if (instance? RecurThunk ret)
+          (recur (zipmap argsyms (.-args ret)))
+          [ret (merge env' (select-keys env [:locals :recur-arity :variadic-recur?]))])))))
+
+;; special forms
 
 (defmulti ^:private eval-special (fn [exp _] (first exp)))
 
@@ -88,17 +118,6 @@
          (update-in [:namespaces ns-sym :ns] #(or % ns-sym))
          (assoc :ns ns-sym))])
 
-(defn- arity [arglist]
-  (if (= (last (butlast arglist)) '&)
-    :variadic
-    (count arglist)))
-
-(defn- bind-args [arglist args]
-  (if (= (arity arglist) :variadic)
-    (let [[fixed-args rest-args] (split-at (- (count arglist) 2) args)]
-      (-> (zipmap arglist fixed-args) (assoc (last arglist) rest-args)))
-    (zipmap arglist args)))
-
 (defmethod eval-special 'fn* [[_ & clauses] env]
   (let [arglists (map first clauses)
         _ (assert (every? #(every? valid-binding-form? %) arglists)
@@ -106,20 +125,8 @@
         arities (map arity arglists)
         _ (assert (<= (count (filter #{:variadic} arities)) 1)
                   "only one variadic clause allowed per function")
-        clause-for-arity (zipmap arities clauses)
         max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
-    [(fn [& args]
-       (let [argc (count args)
-             variadic? (> argc max-fixed-arity)]
-         (if-let [[arglist body] (clause-for-arity (if variadic? :variadic argc))]
-           (let [argsyms (remove '#{&} arglist)
-                 benv (assoc env :recur-arity (count argsyms) :variadic-recur? variadic?)]
-             (loop [locals (bind-args arglist args)]
-               (let [[v _] (eval-exp body (update benv :locals merge locals))]
-                 (if (instance? RecurThunk v)
-                   (recur (zipmap argsyms (.-args v)))
-                   v))))
-           (throw (js/Error. "no matching clause for arity"))))) env]))
+    [(StiltsFn. (zipmap arities clauses) max-fixed-arity) env]))
 
 (defmethod eval-special 'let* [[_ bvec body] env]
   (let [bpairs (partition 2 bvec)]
@@ -186,7 +193,9 @@
     (condp apply [exp]
       special? (eval-special exp env) ; use original env to pass on recur arity
       invoke? (let [[f & args] (map eval-subexp exp)]
-                [(apply f args) env'])
+                (if (instance? StiltsFn f)
+                  (apply-stilts-fn f args env')
+                  [(apply f args) env']))
       map? [(->> (interleave (keys exp) (vals exp))
               (map eval-subexp)
               (apply hash-map)) env']
