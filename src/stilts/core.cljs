@@ -31,6 +31,21 @@
       (get-in env [:locals sym])
       (get-in env [:namespaces (:ns env) :mappings sym] undefined))))
 
+(defn define-ns
+  "Returns a copy of the environment map `env` in which the namespace named by
+   `ns-sym` exists and is populated with the optional `mappings`."
+  ([ns-sym env]
+    (define-ns env ns-sym {}))
+  ([ns-sym mappings env]
+    (assoc-in env [:namespaces ns-sym] {:mappings mappings :ns ns-sym})))
+
+(defn define
+  "Returns a copy of the environment map `env` in which the symbol `sym` is
+   bound to the value `val` within the environment's current working namespace
+   `(:ns env)`."
+  [sym val env]
+  (assoc-in env [:namespaces (:ns env) :mappings sym] val))
+
 (def core-mappings
   (merge stdlib/core-functions stdlib/core-macros))
 
@@ -105,7 +120,7 @@
   (assert (valid-binding-form? sym) "first argument to def must be a non-namespaced symbol")
   (let [[v env'] (eval-exp arg (dissoc env :recur-arity))
         v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
-    [v (assoc-in env' [:namespaces (:ns env') :mappings sym] v)]))
+    [v (define sym v env')]))
 
 (defmethod eval-special 'do [[_ & statements] env]
   (let [return (last statements)]
@@ -122,10 +137,8 @@
 
 (defmethod eval-special 'in-ns [[_ ns-sym] env]
   (assert (valid-binding-form? ns-sym) "namespace name must be a non-namespaced symbol")
-  [nil (-> env
-         (update-in [:namespaces ns-sym :mappings] #(or % core-mappings))
-         (update-in [:namespaces ns-sym :ns] #(or % ns-sym))
-         (assoc :ns ns-sym))])
+  (let [env' (if (resolve-ns ns-sym env) env (define-ns ns-sym core-mappings env))]
+    [nil (assoc env' :ns ns-sym)]))
 
 (defmethod eval-special 'fn* [[_ & clauses] env]
   (let [arglists (map first clauses)
