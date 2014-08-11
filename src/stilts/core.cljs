@@ -219,11 +219,10 @@
       map? [(->> (interleave (keys exp) (vals exp))
               (map eval-subexp)
               (apply hash-map)) env']
-      set? [(set (map eval-subexp exp)) env']
+      coll? [(into (empty exp) (map eval-subexp exp)) env']
       symbol? (let [v (resolve exp env)]
                 (assert (not= v undefined) (str "var " exp " is not defined"))
                 [v env'])
-      vector? [(mapv eval-subexp exp) env']
       [exp env'])))
 
 (def default-env
