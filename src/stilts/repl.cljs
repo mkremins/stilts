@@ -1,41 +1,22 @@
 (ns stilts.repl
   (:require [cljs.reader :as rdr]
+            [clojure.string :as str]
             [stilts.core :as stilts]))
 
-(def rl (js/require "readline"))
+(def init-state
+  {:buffer [] :env stilts/default-env})
 
-(def ^:dynamic *repl-env* stilts/default-env)
-
-(def code-buffer (atom []))
-
-(defn update-prompt! [interface]
-  (let [ns-name (name (:ns *repl-env*))
-        prompt (if (empty? @code-buffer)
-                 (str ns-name "=> ")
-                 (str (apply str (repeat (- (count ns-name) 2) " ")) "#_=> "))]
-    (.setPrompt interface prompt)))
-
-(defn eval-print! [interface line]
-  (try (let [form (rdr/read-string (apply str (conj @code-buffer line)))
-             [res env] (stilts/eval form *repl-env*)]
-         (reset! code-buffer [])
-         (set! *repl-env* env)
-         (update-prompt! interface)
-         (prn res))
+(defn push-line [{:keys [buffer env]} line]
+  (try (let [form (rdr/read-string (str/join " " (conj buffer line)))
+             [res env'] (stilts/eval form env)]
+         {:buffer [] :env env' :result res})
        (catch js/Error e
          (if (= (.-message e) "EOF while reading")
-           (do (swap! code-buffer conj (str line " "))
-               (update-prompt! interface))
-           (do (reset! code-buffer [])
-               (update-prompt! interface)
-               (println (str "Error: " (.-message e))))))
-       (finally
-         (.prompt interface))))
+           {:buffer (conj buffer line) :env env}
+           {:buffer [] :env env :error e}))))
 
-(defn start! []
-  (let [opts #js {:input (.-stdin js/process) :output (.-stdout js/process)}
-        interface (.createInterface rl opts)]
-    (doto interface
-      (update-prompt!)
-      (.prompt)
-      (.on "line" (partial eval-print! interface)))))
+(defn prompt [{:keys [buffer env]}]
+  (let [ns-name (name (:ns env))]
+    (if (empty? buffer)
+      (str ns-name "=> ")
+      (str (str/join (repeat (- (count ns-name) 2) " ")) "#_=> "))))

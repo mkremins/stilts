@@ -1,7 +1,7 @@
 (ns stilts.cli
   (:require [cljs.reader :as rdr]
             [stilts.core :as stilts]
-            [stilts.repl :as repl]))
+            [stilts.repl.node :as repl]))
 
 (enable-console-print!)
 
