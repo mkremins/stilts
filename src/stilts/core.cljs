@@ -27,17 +27,28 @@
     (if-let [full-ns (resolve-ns (symbol ns-name) env)]
       (get-in env [:namespaces full-ns :mappings (symbol (name sym))] undefined)
       undefined)
-    (if (contains? (:locals env) sym)
-      (get-in env [:locals sym])
-      (get-in env [:namespaces (:ns env) :mappings sym] undefined))))
+    (let [{:keys [locals namespaces ns]} env
+          {:keys [mappings referrals]} (namespaces ns)]
+      (condp contains? sym
+        locals (locals sym)
+        mappings (mappings sym)
+        referrals (resolve (referrals sym) env)
+        undefined))))
+
+(def core-mappings
+  (merge stdlib/core-functions stdlib/core-macros))
+
+(def core-referrals
+  (reduce (fn [referrals sym]
+            (assoc referrals sym (symbol "core" (name sym))))
+          {} (keys core-mappings)))
 
 (defn define-ns
   "Returns a copy of the environment map `env` in which the namespace named by
-   `ns-sym` exists and is populated with the optional `mappings`."
-  ([ns-sym env]
-    (define-ns env ns-sym {}))
-  ([ns-sym mappings env]
-    (assoc-in env [:namespaces ns-sym] {:mappings mappings :ns ns-sym})))
+   `ns-sym` exists and is populated with the standard core referrals."
+  [ns-sym env]
+  (assoc-in env [:namespaces ns-sym]
+            {:aliases {} :mappings {} :ns ns-sym :referrals core-referrals}))
 
 (defn define
   "Returns a copy of the environment map `env` in which the symbol `sym` is
@@ -45,9 +56,6 @@
    `(:ns env)`."
   [sym val env]
   (assoc-in env [:namespaces (:ns env) :mappings sym] val))
-
-(def core-mappings
-  (merge stdlib/core-functions stdlib/core-macros))
 
 ;; evaluation utils
 
@@ -137,7 +145,7 @@
 
 (defmethod eval-special 'in-ns [[_ ns-sym] env]
   (assert (valid-binding-form? ns-sym) "namespace name must be a non-namespaced symbol")
-  (let [env' (if (resolve-ns ns-sym env) env (define-ns ns-sym core-mappings env))]
+  (let [env' (if (resolve-ns ns-sym env) env (define-ns ns-sym env))]
     [nil (assoc env' :ns ns-sym)]))
 
 (defmethod eval-special 'fn* [[_ & clauses] env]
@@ -228,7 +236,9 @@
 (def default-env
   "The default environment map for `eval` and `eval-all`, used as a fallback in
    the event that the caller doesn't provide an environment."
-  {:namespaces {'user {:mappings core-mappings :ns 'user}}
+  {:namespaces
+   {'core {:aliases {} :mappings core-mappings :ns 'core :referrals {}}
+    'user {:aliases {} :mappings {} :ns 'user :referrals core-referrals}}
    :ns 'user})
 
 (defn eval
