@@ -106,9 +106,11 @@
 ;; macroexpansion
 
 (defn macroexpand-1 [form env]
-  (if (and (seq? form) (symbol? (first form))
-           (-> (first form) (resolve env) meta :macro))
-    (first (eval-invoke (resolve (first form) env) (rest form) env))
+  (if (and (seq? form) (symbol? (first form)))
+    (let [f (resolve (first form) env)]
+      (if (:macro (meta f))
+        (first (eval-invoke f (rest form) env))
+        form))
     form))
 
 (defn macroexpand [form env]
