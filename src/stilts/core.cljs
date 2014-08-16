@@ -68,11 +68,11 @@
 
 ;; effectful function application
 
-(deftype StiltsFn [clauses max-fixed-arity _meta]
+(deftype StiltsFn [clauses max-fixed-arity locals _meta]
   IMeta
   (-meta [this] _meta)
   IWithMeta
-  (-with-meta [this new-meta] (StiltsFn. clauses max-fixed-arity new-meta)))
+  (-with-meta [this new-meta] (StiltsFn. clauses max-fixed-arity locals new-meta)))
 
 (defn- arity [arglist]
   (if (= (last (butlast arglist)) '&)
@@ -91,7 +91,8 @@
         [arglist body] (get (.-clauses f) (if variadic? :variadic argc))
         _ (assert arglist "no matching clause for arity")
         argsyms (remove '#{&} arglist)
-        benv (assoc env :recur-arity (count argsyms) :variadic-recur? variadic?)]
+        benv (-> (update env :locals merge (.-locals f))
+                 (assoc :recur-arity (count argsyms) :variadic-recur? variadic?))]
     (loop [locals (bind-args arglist args)]
       (let [[ret env'] (eval-exp body (update benv :locals merge locals))]
         (if (instance? RecurThunk ret)
@@ -158,7 +159,7 @@
         _ (assert (<= (count (filter #{:variadic} arities)) 1)
                   "only one variadic clause allowed per function")
         max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
-    [(StiltsFn. (zipmap arities clauses) max-fixed-arity {}) env]))
+    [(StiltsFn. (zipmap arities clauses) max-fixed-arity (:locals env) {}) env]))
 
 (defmethod eval-special 'let* [[_ bvec body] env]
   (let [bpairs (partition 2 bvec)]
