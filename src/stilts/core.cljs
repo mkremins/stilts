@@ -206,7 +206,7 @@
     (if-let [[_ local body] (:catch env)]
       (let [[v env'] (eval-exp body (-> env (assoc-in [:locals local] thrown) (dissoc :catch)))]
         [v (dissoc env' :locals)])
-      (throw (js/Error. "evaluated code threw an uncaught exception")))))
+      (throw (ex-info "evaluated code threw an uncaught exception" {:thrown thrown})))))
 
 (defmethod eval-special 'try [[_ body [_ local :as catch]] env]
   (assert (valid-binding-form? local) "caught exception name must be a non-namespaced symbol")
