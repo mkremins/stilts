@@ -129,7 +129,9 @@
 
 (defmethod eval-special 'def [[_ sym arg] env]
   (assert (valid-binding-form? sym) "first argument to def must be a non-namespaced symbol")
-  (let [[v env'] (eval-exp arg (dissoc env :recur-arity))
+  (let [shadowed (get-in env [:namespaces (:ns env) :referrals sym])
+        _ (assert (not shadowed) (str "def shadows existing referral " shadowed))
+        [v env'] (eval-exp arg (dissoc env :recur-arity))
         v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
     [v (define sym v env')]))
 
