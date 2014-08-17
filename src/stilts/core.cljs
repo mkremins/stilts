@@ -87,17 +87,17 @@
 
 (defn- apply-stilts-fn [f args env]
   (let [argc (count args)
-        variadic? (> argc (.-max-fixed-arity f))
-        [arglist body] (get (.-clauses f) (if variadic? :variadic argc))
-        _ (assert arglist "no matching clause for arity")
+        arity (if (> argc (.-max-fixed-arity f)) :variadic argc)
+        [arglist body] (get (.-clauses f) arity)
+        _ (assert arglist (str "no matching clause for arity " arity))
         argsyms (remove '#{&} arglist)
         benv (-> (update env :locals merge (.-locals f))
-                 (assoc :recur-arity (count argsyms) :variadic-recur? variadic?))]
+                 (assoc :recur-arity (count argsyms)))]
     (loop [locals (bind-args arglist args)]
       (let [[ret env'] (eval-exp body (update benv :locals merge locals))]
         (if (instance? RecurThunk ret)
           (recur (zipmap argsyms (.-args ret)))
-          [ret (merge env' (select-keys env [:locals :recur-arity :variadic-recur?]))])))))
+          [ret (merge env' (select-keys env [:locals :recur-arity]))])))))
 
 (defn- eval-invoke [f args env]
   (if (instance? StiltsFn f)
@@ -198,9 +198,7 @@
   (let [arity (:recur-arity env)
         argc (count args)]
     (assert arity "can only recur from tail position within fn*/loop* body")
-    (assert (= arity argc) (str "expected " arity " args to recur, but got " argc))
-    (when (:variadic-recur? env)
-      (assert (rest (last args)) "last arg to recur within variadic fn must be seqable or nil")))
+    (assert (= arity argc) (str "expected " arity " args to recur, but got " argc)))
   [(RecurThunk. (map #(first (eval-exp % (dissoc env :recur-arity))) args)) env])
 
 (defmethod eval-special 'throw [[_ arg] env]
