@@ -18,22 +18,28 @@
   (or (get-in env [:namespaces (:ns env) :aliases ns-sym])
       (get-in env [:namespaces ns-sym :ns])))
 
+(defn canonicalize
+  "Looks up the symbol `sym` in the environment map `env` and returns its fully
+   canonicalized form, or nil if `env` contains no definition of `sym`."
+  [sym env]
+  (if-let [ns-name (namespace sym)]
+    (when-let [full-ns (resolve-ns (symbol ns-name) env)]
+      (let [v (get-in env [:namespaces full-ns :mappings (symbol (name sym))] undefined)]
+        (when-not (= v undefined) (symbol (name full-ns) (name sym)))))
+    (let [{:keys [mappings referrals]} (get-in env [:namespaces (:ns env)])]
+      (condp contains? sym
+        mappings (canonicalize (symbol (name (:ns env)) (name sym)) env)
+        referrals (canonicalize (referrals sym) env)
+        nil))))
+
 (defn resolve
   "Looks up the symbol `sym` in the environment map `env` and returns the bound
    value, or `undefined` if `env` contains no binding for `sym`. If `sym` is
    namespaced, attempts to resolve the namespace using `resolve-ns`."
   [sym env]
-  (if-let [ns-name (namespace sym)]
-    (if-let [full-ns (resolve-ns (symbol ns-name) env)]
-      (get-in env [:namespaces full-ns :mappings (symbol (name sym))] undefined)
-      undefined)
-    (let [{:keys [locals namespaces ns]} env
-          {:keys [mappings referrals]} (namespaces ns)]
-      (condp contains? sym
-        locals (locals sym)
-        mappings (mappings sym)
-        referrals (resolve (referrals sym) env)
-        undefined))))
+  (if-let [sym' (canonicalize sym env)]
+    (get-in env [:namespaces (symbol (namespace sym')) :mappings (symbol (name sym'))])
+    (get-in env [:locals sym] undefined)))
 
 (def core-mappings
   (merge stdlib/core-functions stdlib/core-macros))
