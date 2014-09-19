@@ -37,9 +37,11 @@
    value, or `undefined` if `env` contains no binding for `sym`. If `sym` is
    namespaced, attempts to resolve the namespace using `resolve-ns`."
   [sym env]
-  (if-let [sym' (canonicalize sym env)]
-    (get-in env [:namespaces (symbol (namespace sym')) :mappings (symbol (name sym'))])
-    (get-in env [:locals sym] undefined)))
+  (if (contains? (:locals env) sym)
+    (get-in env [:locals sym])
+    (if-let [sym' (canonicalize sym env)]
+      (get-in env [:namespaces (symbol (namespace sym')) :mappings (symbol (name sym'))])
+      undefined)))
 
 (def core-mappings
   (merge stdlib/core-functions stdlib/core-macros))
