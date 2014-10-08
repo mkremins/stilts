@@ -100,7 +100,7 @@
         [arglist body] (get (.-clauses f) arity)
         _ (assert arglist (str "no matching clause for arity " arity))
         argsyms (remove '#{&} arglist)
-        benv (-> (update env :locals merge (.-locals f))
+        benv (-> (update env :locals merge (.-locals f) {(.-name f) f})
                  (assoc :recur-arity (count argsyms)))]
     (loop [locals (bind-args arglist args)]
       (let [[ret env'] (eval-exp body (update benv :locals merge locals))]
