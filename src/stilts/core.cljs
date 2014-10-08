@@ -76,11 +76,12 @@
 
 ;; effectful function application
 
-(deftype StiltsFn [clauses max-fixed-arity locals _meta]
+(deftype StiltsFn [name clauses max-fixed-arity locals _meta]
   IMeta
   (-meta [this] _meta)
   IWithMeta
-  (-with-meta [this new-meta] (StiltsFn. clauses max-fixed-arity locals new-meta)))
+  (-with-meta [this new-meta]
+    (StiltsFn. name clauses max-fixed-arity locals new-meta)))
 
 (defn- arity [arglist]
   (if (= (last (butlast arglist)) '&)
@@ -161,15 +162,17 @@
   (let [env' (if (resolve-ns ns-sym env) env (define-ns ns-sym env))]
     [nil (assoc env' :ns ns-sym)]))
 
-(defmethod eval-special 'fn* [[_ & clauses] env]
-  (let [arglists (map first clauses)
+(defmethod eval-special 'fn* [[_ name & clauses] env]
+  (let [_ (assert (valid-binding-form? name)
+                  "local fn name must be a non-namespaced symbol")
+        arglists (map first clauses)
         _ (assert (every? #(every? valid-binding-form? %) arglists)
                   "fn params must be non-namespaced symbols")
         arities (map arity arglists)
         _ (assert (<= (count (filter #{:variadic} arities)) 1)
                   "only one variadic clause allowed per function")
         max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
-    [(StiltsFn. (zipmap arities clauses) max-fixed-arity (:locals env) {}) env]))
+    [(StiltsFn. name (zipmap arities clauses) max-fixed-arity (:locals env) {}) env]))
 
 (defmethod eval-special 'let* [[_ bvec body] env]
   (let [bpairs (partition 2 bvec)]

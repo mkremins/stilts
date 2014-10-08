@@ -29,7 +29,7 @@
 ;; macros
 
 (defn -defn [name & clauses]
-  `(def ~name (~'fn ~@clauses)))
+  `(def ~name (~'fn ~name ~@clauses)))
 
 (defn -defmacro [name & clauses]
   `(~'defn ~(with-meta name {:macro true}) ~@clauses))
@@ -87,14 +87,16 @@
   (-bindings [this expr] (vec-bindings this expr)))
 
 (defn -fn [& clauses]
-  (let [clauses (if (vector? (first clauses)) (list clauses) clauses)]
-    `(fn* ~@(map (fn [[arglist & body]]
-                   (let [gensyms (repeatedly gensym)
-                         genargs (zipmap (remove '#{&} arglist) gensyms)]
-                     `(~(mapv #(get genargs % %) arglist) ; replace bforms with gensyms in arglist
-                       (~'let [~@(interleave (keys genargs) (vals genargs))]
-                         ~@body))))
-                 clauses))))
+  (let [[name clauses] (if (symbol? (first clauses))
+                         [(first clauses) (rest clauses)]
+                         [(gensym "fn_") clauses])
+        clauses (if (vector? (first clauses)) (list clauses) clauses)]
+    `(fn* ~name
+       ~@(for [[arglist & body] clauses
+               :let [gensyms (repeatedly gensym)
+                     genargs (zipmap (remove '#{&} arglist) gensyms)]]
+           `(~(mapv #(get genargs % %) arglist) ; replace bforms with gensyms in arglist
+             (~'let [~@(interleave (keys genargs) (vals genargs))] ~@body))))))
 
 (defn -let [bvec & body]
   (let [bpairs (mapcat #(apply -bindings %) (partition 2 bvec))]
