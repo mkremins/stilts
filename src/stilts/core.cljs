@@ -95,23 +95,23 @@
       (-> (zipmap arglist fixed-args) (assoc (last arglist) rest-args)))
     (zipmap arglist args)))
 
-(defn- apply-stilts-fn [f args env opts]
+(defn- apply-stilts-fn [f args env ctx]
   (let [argc (count args)
         arity (if (> argc (.-max-fixed-arity f)) :variadic argc)
         [arglist body] (get (.-clauses f) arity)
         _ (assert arglist (str "no matching clause for arity " arity))
         argsyms (remove '#{&} arglist)
-        opts' (-> (update opts :locals merge (.-locals f) {(.-name f) f})
-                  (assoc :recur-arity (count argsyms)))]
+        ctx' (-> (update ctx :locals merge (.-locals f) {(.-name f) f})
+                 (assoc :recur-arity (count argsyms)))]
     (loop [env env locals (bind-args arglist args)]
-      (let [[ret env'] (eval* body env (update opts' :locals merge locals))]
+      (let [[ret env'] (eval* body env (update ctx' :locals merge locals))]
         (if (instance? RecurThunk ret)
           (recur env' (zipmap argsyms (.-args ret)))
           [ret env'])))))
 
-(defn- eval-invoke [f args env opts]
+(defn- eval-invoke [f args env ctx]
   (if (instance? StiltsFn f)
-    (apply-stilts-fn f args env opts)
+    (apply-stilts-fn f args env ctx)
     [(apply f args) env]))
 
 ;; macroexpansion
@@ -137,26 +137,26 @@
 
 (defmulti ^:private eval-special (fn [exp _ _] (first exp)))
 
-(defmethod eval-special 'def [[_ sym arg] env opts]
+(defmethod eval-special 'def [[_ sym arg] env ctx]
   (assert (valid-binding-form? sym) "first argument to def must be a non-namespaced symbol")
   (let [shadowed (get-in env [:namespaces (:ns env) :referrals sym])
         _ (assert (not shadowed) (str "def shadows existing referral " shadowed))
-        [v env'] (eval* arg env (dissoc opts :recur-arity))
+        [v env'] (eval* arg env (dissoc ctx :recur-arity))
         v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
     [v (define sym v env')]))
 
-(defmethod eval-special 'do [[_ & statements] env opts]
+(defmethod eval-special 'do [[_ & statements] env ctx]
   (let [return (last statements)
-        opts' (dissoc opts :recur-arity)]
+        ctx' (dissoc ctx :recur-arity)]
     (loop [statements (butlast statements) env env]
       (if-let [statement (first statements)]
-        (let [[_ env'] (eval* statement env opts')]
+        (let [[_ env'] (eval* statement env ctx')]
           (recur (rest statements) env'))
-        (eval* return env opts)))))
+        (eval* return env ctx)))))
 
-(defmethod eval-special 'if [[_ test then else] env opts]
-  (let [[test-v env'] (eval* test env (dissoc opts :recur-arity))]
-    (eval* (if test-v then else) env' opts)))
+(defmethod eval-special 'if [[_ test then else] env ctx]
+  (let [[test-v env'] (eval* test env (dissoc ctx :recur-arity))]
+    (eval* (if test-v then else) env' ctx)))
 
 (defmethod eval-special 'in-ns [[_ ns-sym] env _]
   (assert (valid-binding-form? ns-sym) "namespace name must be a non-namespaced symbol")
@@ -175,52 +175,52 @@
         max-fixed-arity (or (apply max (remove #{:variadic} arities)) -1)]
     [(StiltsFn. name (zipmap arities clauses) max-fixed-arity locals {}) env]))
 
-(defmethod eval-special 'let* [[_ bvec body] env {:keys [recur-arity] :as opts}]
+(defmethod eval-special 'let* [[_ bvec body] env {:keys [recur-arity] :as ctx}]
   (let [bpairs (partition 2 bvec)]
     (assert (every? valid-binding-form? (map first bpairs))
             "let binding names must be non-namespaced symbols")
     (loop [bpairs bpairs env env
-           opts' (dissoc opts :recur-arity)]
+           ctx' (dissoc ctx :recur-arity)]
       (if-let [[bsym bform] (first bpairs)]
-        (let [[v env'] (eval* bform env opts')]
-          (recur (rest bpairs) env' (assoc-in opts' [:locals bsym] v)))
-        (eval* body env (assoc opts' :recur-arity recur-arity))))))
+        (let [[v env'] (eval* bform env ctx')]
+          (recur (rest bpairs) env' (assoc-in ctx' [:locals bsym] v)))
+        (eval* body env (assoc ctx' :recur-arity recur-arity))))))
 
-(defmethod eval-special 'loop* [[_ bvec body] env opts]
+(defmethod eval-special 'loop* [[_ bvec body] env ctx]
   (let [bpairs (partition 2 bvec)
         bsyms (map first bpairs)
         recur-arity (count bpairs)]
     (assert (every? valid-binding-form? bsyms)
             "loop binding names must be non-namespaced symbols")
     (loop [bpairs bpairs env env
-           opts' (dissoc opts :recur-arity)]
+           ctx' (dissoc ctx :recur-arity)]
       (if-let [[bsym bform] (first bpairs)]
-        (let [[v env'] (eval* bform env opts')]
-          (recur (rest bpairs) env' (assoc-in opts' [:locals bsym] v)))
-        (let [[v env'] (eval* body env (assoc opts' :recur-arity recur-arity))]
+        (let [[v env'] (eval* bform env ctx')]
+          (recur (rest bpairs) env' (assoc-in ctx' [:locals bsym] v)))
+        (let [[v env'] (eval* body env (assoc ctx' :recur-arity recur-arity))]
           (if (instance? RecurThunk v)
-            (recur (map vector bsyms (.-args v)) env' opts')
+            (recur (map vector bsyms (.-args v)) env' ctx')
             [v env']))))))
 
 (defmethod eval-special 'quote [[_ arg] env _]
   [arg env])
 
-(defmethod eval-special 'recur [[_ & args] env opts]
-  (let [arity (:recur-arity opts)
+(defmethod eval-special 'recur [[_ & args] env ctx]
+  (let [arity (:recur-arity ctx)
         argc (count args)]
     (assert arity "can only recur from tail position within fn*/loop* body")
     (assert (= arity argc) (str "expected " arity " args to recur, but got " argc)))
-  [(RecurThunk. (map #(first (eval* % env (dissoc opts :recur-arity))) args)) env])
+  [(RecurThunk. (map #(first (eval* % env (dissoc ctx :recur-arity))) args)) env])
 
-(defmethod eval-special 'throw [[_ arg] env opts]
-  (let [[thrown _] (eval* arg env opts)]
-    (if-let [[_ local body] (:catch opts)]
-      (eval* body env (-> opts (assoc-in [:locals local] thrown) (dissoc :catch)))
+(defmethod eval-special 'throw [[_ arg] env ctx]
+  (let [[thrown _] (eval* arg env ctx)]
+    (if-let [[_ local body] (:catch ctx)]
+      (eval* body env (-> ctx (assoc-in [:locals local] thrown) (dissoc :catch)))
       (throw (ex-info "evaluated code threw an uncaught exception" {:thrown thrown})))))
 
-(defmethod eval-special 'try [[_ body [_ local :as catch]] env opts]
+(defmethod eval-special 'try [[_ body [_ local :as catch]] env ctx]
   (assert (valid-binding-form? local) "caught exception name must be a non-namespaced symbol")
-  (eval* body env (-> opts (assoc :catch catch) (dissoc :recur-arity))))
+  (eval* body env (-> ctx (assoc :catch catch) (dissoc :recur-arity))))
 
 ;; generic evaluation
 
@@ -232,15 +232,15 @@
 
 (defn- eval*
   ([exp env] (eval* exp env {}))
-  ([exp env opts]
-    (let [opts' (dissoc opts :recur-arity)
-          eval*' #(first (eval* % env opts'))]
+  ([exp env ctx]
+    (let [ctx' (dissoc ctx :recur-arity)
+          eval*' #(first (eval* % env ctx'))]
       (condp apply [exp]
-        special? (eval-special exp env opts) ; use original opts to pass on recur arity
-        invoke?  (let [[f & args] (map eval*' exp)] (eval-invoke f args env opts'))
+        special? (eval-special exp env ctx) ; use original ctx to pass on recur arity
+        invoke?  (let [[f & args] (map eval*' exp)] (eval-invoke f args env ctx'))
         map?     [(->> (flatten1 exp) (map eval*') (apply hash-map)) env]
         coll?    [(into (empty exp) (map eval*' exp)) env]
-        symbol?  (let [v (resolve exp env (:locals opts))]
+        symbol?  (let [v (resolve exp env (:locals ctx))]
                    (assert (not= v undefined) (str "var " exp " is not defined"))
                    [v env])
                  [exp env]))))
