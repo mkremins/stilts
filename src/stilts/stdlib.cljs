@@ -28,6 +28,14 @@
 
 ;; macros
 
+(defn -case [expr & body]
+  (loop [expanded (if (odd? (count body))
+                    (last body) `(throw ~(js/Error. "No matching clause")))
+         clauses (reverse (partition 2 body))]
+    (if-let [[test block] (first clauses)]
+      (recur `(if (~'= ~expr ~test) ~block ~expanded) (rest clauses))
+      expanded)))
+
 (defn -defn [name & clauses]
   `(def ~name (~'fn ~name ~@clauses)))
 
@@ -113,6 +121,6 @@
 ;; tying it all together
 
 (def core-macros
-  (->> {'and -and, 'defmacro -defmacro, 'defn -defn, 'fn -fn, 'let -let, 'loop -loop, 'or -or,
-        'when -when}
+  (->> {'and -and, 'case -case, 'defmacro -defmacro, 'defn -defn, 'fn -fn, 'let -let, 'loop -loop,
+        'or -or, 'when -when}
        (map-vals #(with-meta % {:macro true}))))
