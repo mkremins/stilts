@@ -218,7 +218,7 @@
       (eval* body env (-> ctx (assoc-in [:locals local] thrown) (dissoc :catch)))
       (throw (ex-info "evaluated code threw an uncaught exception" {:thrown thrown})))))
 
-(defmethod eval-special 'try [[_ body [_ local :as catch]] env ctx]
+(defmethod eval-special 'try* [[_ body [_ local :as catch]] env ctx]
   (assert (valid-binding-form? local) "caught exception name must be a non-namespaced symbol")
   (eval* body env (-> ctx (assoc :catch catch) (dissoc :recur-arity))))
 
