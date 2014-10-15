@@ -1,4 +1,8 @@
 (ns stilts.core
+  "The core Stilts interpreter. Exports `eval` and `eval-all` functions as
+   entry points for code evaluation, defines `default-env` (the default initial
+   evaluation environment), and provides several other utilities for working
+   with environment maps."
   (:refer-clojure :exclude [eval macroexpand macroexpand-1 resolve])
   (:require [clojure.walk :as walk]
             [medley.core :refer [update]]

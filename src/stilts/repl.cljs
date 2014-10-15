@@ -1,4 +1,8 @@
 (ns stilts.repl
+  "Utilities for creating a line-oriented REPL – a specific type of REPL that
+   accepts code as text input, one line at a time, and prompts the user for
+   another line (rather than erroring out) when an incomplete string of code is
+   submitted."
   (:require [cljs.reader :as rdr]
             [clojure.string :as str]
             [stilts.core :as stilts]))

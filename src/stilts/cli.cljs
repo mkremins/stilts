@@ -1,4 +1,6 @@
 (ns stilts.cli
+  "A node.js-specific CLI application capable of launching a command-line REPL
+   and executing script files containing Stilts-compatible Clojure code."
   (:require [cljs.reader :as rdr]
             [stilts.core :as stilts]
             [stilts.repl.node :as repl]))

@@ -1,4 +1,7 @@
 (ns stilts.stdlib
+  "The Stilts standard library, containing functions (aliased from `cljs.core`)
+   and macros (reimplemented as ordinary ClojureScript functions) borrowed from
+   Clojure's own stdlib."
   (:require [medley.core :refer [map-vals update]]))
 
 ;; functions
