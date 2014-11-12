@@ -1,5 +1,5 @@
 (defproject mkremins/stilts "0.0-SNAPSHOT"
-  :description "Tiny ClojureScript interpreter in ClojureScript"
+  :description "Tiny Clojure interpreter in ClojureScript"
   :license {:name "MIT License"
             :url "http://opensource.org/licenses/MIT"
             :distribution :repo}
