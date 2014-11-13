@@ -35,8 +35,19 @@
   (loop [expanded (if (odd? (count body))
                     (last body) `(throw ~(js/Error. "No matching clause")))
          clauses (reverse (partition 2 body))]
-    (if-let [[test block] (first clauses)]
-      (recur `(if (~'= ~expr ~test) ~block ~expanded) (rest clauses))
+    (if-let [[test then] (first clauses)]
+      (let [test (if (list? test)
+                   `(~'contains? ~(set test) ~expr)
+                   `(~'= ~expr ~test))]
+        (recur `(if ~test ~then ~expanded) (rest clauses)))
+      expanded)))
+
+(defn -cond [& body]
+  (loop [expanded (if (odd? (count body))
+                    (last body) `(throw ~(js/Error. "No matching clause")))
+         clauses (reverse (partition 2 body))]
+    (if-let [[test then] (first clauses)]
+      (recur `(if ~test ~then ~expanded) (rest clauses))
       expanded)))
 
 (defn -defn [name & clauses]
@@ -166,9 +177,18 @@
        (~'let [~@(interleave (map first bpairs) gensyms)]
          ~@body))))
 
+(defn -if-let [[bform bval] then else]
+  (let [bsym (gensym)]
+    `(let* [~bsym ~bval]
+       (~'if ~bsym (~'let [~bform ~bsym] ~then) ~else))))
+
+(defn -when-let [[bform bval] & body]
+  `(~'if-let [~bform ~bval] (do ~@body) nil))
+
 ;; tying it all together
 
 (def core-macros
-  (->> {'and -and, 'case -case, 'defmacro -defmacro, 'defn -defn, 'fn -fn, 'let -let, 'loop -loop,
-        'or -or, 'try -try, 'when -when}
+  (->> {'and -and, 'case -case, 'cond -cond, 'defmacro -defmacro, 'defn -defn, 'fn -fn,
+        'if-let -if-let, 'let -let, 'loop -loop, 'or -or, 'try -try, 'when -when,
+        'when-let -when-let}
        (map-vals #(with-meta % {:macro true}))))
