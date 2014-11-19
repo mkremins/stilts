@@ -1,6 +1,6 @@
 # Stilts
 
-Stilts is a tiny Clojure interpreter written in ClojureScript.
+Stilts is a tiny interpreted Lisp, heavily inspired by Clojure and implemented in ClojureScript.
 
 ## Why?
 
@@ -11,7 +11,7 @@ I'm also interested in exploring some of the ideas put forth by projects like [E
 ## Features
 
 ### Stuff I have
-* Support for `def`, `do`, `if`, `fn*`, `let*`, `loop*`, `quote`, `recur`, `throw`, `try` special forms
+* Support for `def`, `do`, `if`, `fn*`, `let*`, `loop*`, `quote`, `recur` special forms
 * Macroexpansion and runtime `defmacro`
 * Precise control over the evaluation environment
 * A [command-line REPL](https://github.com/mkremins/stilts-cli) via node.js

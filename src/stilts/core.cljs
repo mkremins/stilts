@@ -216,16 +216,6 @@
     (assert (= arity argc) (str "expected " arity " args to recur, but got " argc)))
   [(RecurThunk. (map #(first (eval* % env (dissoc ctx :recur-arity))) args)) env])
 
-(defmethod eval-special 'throw [[_ arg] env ctx]
-  (let [[thrown _] (eval* arg env ctx)]
-    (if-let [[_ local body] (:catch ctx)]
-      (eval* body env (-> ctx (assoc-in [:locals local] thrown) (dissoc :catch)))
-      (throw (ex-info "evaluated code threw an uncaught exception" {:thrown thrown})))))
-
-(defmethod eval-special 'try* [[_ body [_ local :as catch]] env ctx]
-  (assert (valid-binding-form? local) "caught exception name must be a non-namespaced symbol")
-  (eval* body env (-> ctx (assoc :catch catch) (dissoc :recur-arity))))
-
 ;; generic evaluation
 
 (defn- invoke? [exp]

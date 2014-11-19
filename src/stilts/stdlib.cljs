@@ -69,51 +69,6 @@
 (defn -when [test & body]
   `(if ~test ~(cons 'do body) nil))
 
-;; try-catch
-
-(defn- parse-try-body [forms]
-  (let [catch? (every-pred seq? #(= (first %) 'catch))
-        default? (every-pred catch? #(= (second %) :default))
-        finally? (every-pred seq? #(= (first %) 'finally))]
-    (loop [state :body forms forms
-           parsed {:body [] :cblocks [] :dblock nil :fblock nil}]
-      (if-let [form (first forms)]
-        (case state
-          :body
-          (condp apply [form]
-            catch?   (recur :catches forms parsed)
-            finally? (recur :finally forms parsed)
-            (recur :body (rest forms) (update parsed :body conj form)))
-          :catches
-          (condp apply [form]
-            default? (recur :finally (rest forms) (assoc parsed :dblock form))
-            catch?   (recur :catches (rest forms) (update parsed :cblocks conj form))
-            finally? (recur :finally forms parsed)
-            (throw (js/Error. "Invalid try form")))
-          :finally
-          (recur :done (rest forms) (assoc parsed :fblock form))
-          :done
-          (throw (js/Error. "Unexpected form after finally")))
-        parsed))))
-
-(defn- expand-catches [err-local cblocks dblock]
-  `(~'case (~'type ~err-local)
-     ~@(mapcat (fn [[_ ctype clocal & cbody]]
-                 [ctype `(let* [~clocal ~err-local] (do ~@cbody))])
-               cblocks)
-     ~(if dblock
-        (let [[_ _ dlocal & dbody] dblock]
-          `(let* [~dlocal ~err-local] (do ~@dbody)))
-        `(throw ~err-local))))
-
-(defn -try [& forms]
-  (let [{:keys [body cblocks dblock fblock]} (parse-try-body forms)
-        err-local (gensym)]
-    `(let* [v# (~'try* (do ~@body)
-                       (catch ~err-local
-                         ~(expand-catches err-local cblocks dblock)))]
-       (do ~@(rest fblock) v#))))
-
 ;; destructuring binding
 
 (defprotocol IBindingForm
@@ -189,6 +144,5 @@
 
 (def core-macros
   (->> {'and -and, 'case -case, 'cond -cond, 'defmacro -defmacro, 'defn -defn, 'fn -fn,
-        'if-let -if-let, 'let -let, 'loop -loop, 'or -or, 'try -try, 'when -when,
-        'when-let -when-let}
+        'if-let -if-let, 'let -let, 'loop -loop, 'or -or, 'when -when, 'when-let -when-let}
        (map-vals #(with-meta % {:macro true}))))
