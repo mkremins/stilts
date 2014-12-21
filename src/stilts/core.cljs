@@ -3,7 +3,7 @@
    entry points for code evaluation, defines `default-env` (the default initial
    evaluation environment), and provides several other utilities for working
    with environment maps."
-  (:refer-clojure :exclude [eval macroexpand macroexpand-1 resolve])
+  (:refer-clojure :exclude [eval intern macroexpand macroexpand-1 resolve])
   (:require [clojure.walk :as walk]
             [medley.core :refer [update]]
             [stilts.stdlib :as stdlib]))
@@ -28,13 +28,17 @@
   [sym env]
   (if-let [ns-name (namespace sym)]
     (when-let [full-ns (resolve-ns (symbol ns-name) env)]
-      (let [v (get-in env [:namespaces full-ns :mappings (symbol (name sym))] undefined)]
-        (when-not (= v undefined) (symbol (name full-ns) (name sym)))))
-    (let [{:keys [mappings referrals]} (get-in env [:namespaces (:ns env)])]
+      (when (get-in env [:namespaces full-ns :defs (symbol (name sym))])
+        (symbol (name full-ns) (name sym))))
+    (let [{:keys [defs referrals]} (get-in env [:namespaces (:ns env)])]
       (condp contains? sym
-        mappings (canonicalize (symbol (name (:ns env)) (name sym)) env)
-        referrals (canonicalize (referrals sym) env)
+        defs (canonicalize (symbol (name (:ns env)) (name sym)) env)
+        referrals (canonicalize (symbol (name (referrals sym)) (name sym)) env)
         nil))))
+
+(defn resolve-var [sym env]
+  (when-let [sym' (canonicalize sym env)]
+    (get-in env [:namespaces (symbol (namespace sym')) :defs (symbol (name sym'))])))
 
 (defn resolve
   "Looks up the symbol `sym` in the environment map `env` and returns the bound
@@ -44,31 +48,27 @@
   ([sym env locals]
     (if (contains? locals sym)
       (locals sym)
-      (if-let [sym' (canonicalize sym env)]
-        (get-in env [:namespaces (symbol (namespace sym')) :mappings (symbol (name sym'))])
-        undefined))))
+      (:value (resolve-var sym env) undefined))))
 
-(def core-mappings
-  (merge stdlib/core-functions stdlib/core-macros))
+(defn create-ns [name]
+  {:aliases {} :defs {} :ns name :referrals {}})
 
-(def core-referrals
-  (reduce (fn [referrals sym]
-            (assoc referrals sym (symbol "core" (name sym))))
-          {} (keys core-mappings)))
+(defn refer-core [ns]
+  (reduce #(assoc-in %1 [:referrals (:name %2)] 'core) ns stdlib/core-defs))
+
+(defn intern [ns var]
+  (assoc-in ns [:defs (:name var)] var))
 
 (defn define-ns
   "Returns a copy of the environment map `env` in which the namespace named by
    `ns-sym` exists and is populated with the standard core referrals."
   [ns-sym env]
-  (assoc-in env [:namespaces ns-sym]
-            {:aliases {} :mappings {} :ns ns-sym :referrals core-referrals}))
+  (assoc-in env [:namespaces ns-sym] (-> (create-ns ns-sym) refer-core)))
 
 (defn define
-  "Returns a copy of the environment map `env` in which the symbol `sym` is
-   bound to the value `val` within the environment's current working namespace
-   `(:ns env)`."
-  [sym val env]
-  (assoc-in env [:namespaces (:ns env) :mappings sym] val))
+  "Returns a copy of the environment map `env` in which `var` is defined."
+  [var env]
+  (update-in env [:namespaces (:ns var)] intern var))
 
 ;; evaluation utils
 
@@ -122,9 +122,9 @@
 
 (defn macroexpand-1 [form env]
   (if (and (seq? form) (symbol? (first form)))
-    (let [f (resolve (first form) env)]
-      (if (:macro (meta f))
-        (first (eval-invoke f (rest form) env {}))
+    (let [var (resolve-var (first form) env)]
+      (if (:macro (:meta var))
+        (first (eval-invoke (:value var) (rest form) env {}))
         form))
     form))
 
@@ -145,9 +145,9 @@
   (assert (valid-binding-form? sym) "first argument to def must be a non-namespaced symbol")
   (let [shadowed (get-in env [:namespaces (:ns env) :referrals sym])
         _ (assert (not shadowed) (str "def shadows existing referral " shadowed))
-        [v env'] (eval* arg env (dissoc ctx :recur-arity))
-        v (if (satisfies? IMeta v) (with-meta v (meta sym)) v)]
-    [v (define sym v env')]))
+        [val env'] (eval* arg env (dissoc ctx :recur-arity))
+        var {:name sym :ns (:ns env) :value val :meta (meta sym)}]
+    [val (define var env')]))
 
 (defmethod eval-special 'do [[_ & statements] env ctx]
   (let [return (last statements)
@@ -243,8 +243,8 @@
   "The default environment map for `eval` and `eval-all`, used as a fallback in
    the event that the caller doesn't provide an environment."
   {:namespaces
-   {'core {:aliases {} :mappings core-mappings :ns 'core :referrals {}}
-    'user {:aliases {} :mappings {} :ns 'user :referrals core-referrals}}
+   {'core (reduce intern (create-ns 'core) stdlib/core-defs)
+    'user (-> (create-ns 'user) refer-core)}
    :ns 'user})
 
 (defn eval
